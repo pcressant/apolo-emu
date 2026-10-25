@@ -1,6 +1,6 @@
 """Modèle de l'appareil Apollo II.
 
-Deux étages, comme dans le firmware (docs/etat-des-connaissances.md §2) :
+Deux étages, comme dans le firmware (docs/protocole.md §2) :
 
 1. Étage communication, octet par octet : mute (Ctrl-A, Ctrl-X), commandes
    immédiates @I+ et @I?, tout le reste vers le tampon d'entrée.
@@ -135,6 +135,7 @@ class ApolloDevice:
         self.reply_sink = reply
         self.clock = clock
         backend.set_event_sink(self.on_speech_event)
+        self._deferred_table = self._table()
         self._next_uid = 1
         self._next_mark = 1
         self.power_on()
@@ -245,6 +246,7 @@ class ApolloDevice:
         lost = len(self.batch) + sum(1 for e in self.timeline if not (isinstance(e, _Spoken) and e.started))
         self.batch.clear()
         self.timeline.clear()
+        self._pending_mark_actions.clear()
         self.projected = self.live.copy()
         if had_speech:
             self.backend.cancel()
@@ -255,7 +257,7 @@ class ApolloDevice:
         done = self.clauses.push(b, self.cmd_char)
         if done is not None:
             raw, by_cr = done
-            self._clause(P.scan_clause(raw, self.cmd_char, self._table(), by_cr))
+            self._clause(P.scan_clause(raw, self.cmd_char, self._deferred_table, by_cr))
 
     # ---------------------------------------------------- étage proposition
 

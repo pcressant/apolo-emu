@@ -2,7 +2,7 @@
 
 Les tables suivent la ROM UK V2.01 4.04 telle que la décrit la décompilation
 « Dolphin-Apollo-II-Reborn », recoupée avec la documentation Dolphin (voir
-docs/etat-des-connaissances.md). Rien ici ne dépend du transport ni du moteur vocal.
+docs/protocole.md). Rien ici ne dépend du transport ni du moteur vocal.
 """
 
 from __future__ import annotations

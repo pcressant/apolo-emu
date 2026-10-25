@@ -50,7 +50,7 @@ def prepare_listen_path(path: str) -> None:
 
 
 class Trace:
-    """Journal horodaté des octets échangés, rejouable (docs/journalisation.md)."""
+    """Journal horodaté des octets échangés (format décrit dans docs/architecture.md)."""
 
     def __init__(self, stream: IO[str]) -> None:
         self.stream = stream

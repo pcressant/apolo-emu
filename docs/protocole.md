@@ -1,7 +1,7 @@
-# État des connaissances — Apollo II (phase 1)
+# Protocole Apollo II — état des connaissances
 
-Ce document rassemble ce que l'on sait du protocole Apollo II. Il précise d'où vient chaque information et
-quel crédit on peut lui accorder. Les sources sont décrites dans
+Ce document rassemble ce que l'on sait du protocole Apollo II. Il a été établi en phase 1 et sert de référence à
+l'implémentation. Il précise d'où vient chaque information et quel crédit on peut lui accorder. Les sources sont décrites dans
 [references.md](references.md).
 
 ## Niveaux de confiance
