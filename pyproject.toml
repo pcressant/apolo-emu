@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apolo-emu"
+version = "0.1.0"
+description = "Émulateur du synthétiseur vocal Dolphin Apollo II, relié à QEMU par une socket Unix"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+apolo-emu = "apolo_emu.cli:main"
+
+[tool.setuptools]
+packages = ["apolo_emu"]
