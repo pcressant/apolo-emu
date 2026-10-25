@@ -74,9 +74,9 @@ apolo-emu --connect /chemin/vers/com1.sock
 
 | Invité | Options suggérées |
 |---|---|
-| Sonolect 7.11 (DOS) | `--language fr --codepage cp850` ; ajouter `--extension burst-interrupt` pour retrouver l'interruption à la frappe de la passerelle `pc486` |
-| Épaulard (Windows 3.11) | `--language fr --codepage cp850 --extension epaulard-index` |
-| IBM Screen Reader/2 (OS/2) | `--language en --extension lenient-speed` (le profil IBM envoie `@wb` et `@wf`) |
+| Sonolect 7.11 (DOS) | `--language fr --codepage cp850 --extension burst-interrupt` (interruption de la parole à la frappe) |
+| Épaulard (Windows 3.11) | `--language fr --codepage cp850` ; la même ligne que Sonolect convient (voir `../pc486/scripts/pc486`) |
+| IBM Screen Reader/2 (OS/2) | `--language en --extension lenient-speed` (le profil IBM envoie `@wb` et `@wf`) ; voir `../os2/scripts/gateway` |
 | Speakup (Linux) | aucune |
 
 Les extensions sont désactivées par défaut. Elles sont décrites dans [docs/extensions.md](docs/extensions.md) et

@@ -91,7 +91,8 @@ qemu-system-i386 … \
 
 ### QEMU déjà configuré en serveur
 
-C'est le cas des projets `pc486` et `os2` :
+C'est le cas des projets `pc486` et `os2`, dont les scripts lancent Apolo-emu de cette façon
+(`scripts/pc486 gateway start`, `scripts/gateway`) :
 
 ```text
 -chardev socket,id=com1,path=$RUN/com1.sock,server=on,wait=off -serial chardev:com1
@@ -100,13 +101,12 @@ C'est le cas des projets `pc486` et `os2` :
 Apolo-emu s'y connecte :
 
 ```bash
-apolo-emu --connect /chemin/vers/run/com1.sock --language fr --codepage cp850 --extension epaulard-index
+apolo-emu --connect /chemin/vers/run/com1.sock --language fr --codepage cp850 --extension burst-interrupt
 ```
 
-- Le chardev serveur de QEMU n'accepte qu'un client à la fois. Il faut donc que la passerelle du projet ne soit
-  pas connectée à ce moment-là. Arrêter cette passerelle reste une décision de l'utilisateur.
+- Le chardev serveur de QEMU n'accepte qu'un client à la fois : un seul Apolo-emu (ou autre programme) par VM.
 - Avec `wait=off`, les octets que l'invité émet quand aucun client n'est connecté sont perdus.
-- **Rien n'est à modifier dans ces projets** pour essayer Apolo-emu.
+- Apolo-emu se reconnecte chaque seconde : il peut être lancé avant la VM et survit à son redémarrage.
 
 ### Exemples complets
 

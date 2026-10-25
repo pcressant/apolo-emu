@@ -58,18 +58,24 @@ Tests : `python3 -m unittest discover -s tests -t .` (environ 4 s ; QEMU utilis�
 est présent). Parole réelle : `APOLO_EMU_SPEECHD=1 python3 -m unittest
 tests.test_speechd_integration`. `nix-build` relance la suite.
 
-## Projets voisins : lecture seule
+## Projets voisins
 
-- `../pc486` : DOS / Windows 3.11, Sonolect 7.11 et Épaulard
-  (passerelle `gateway/apollo2spd.py`).
+- `../pc486` : DOS / Windows 3.11, Sonolect 7.11 et Épaulard. Depuis le 25 octobre
+  2026, `scripts/pc486` lance Apolo-emu (`gateway_start`) et Épaulard utilise l'écho
+  authentique `@E` ; l'ancienne passerelle `gateway/apollo2spd.py` est dans son
+  historique git.
 - `../os2` : OS/2 Warp 4, IBM Screen Reader/2 2.01 ; documentation historique dans
   `../os2/media/screen-reader/apollo-source/` (`APOLLO.TXT`, `APOLLO2.TXT`),
-  investigation et correctif QEMU sur le port série.
+  investigation et correctif QEMU sur le port série. `scripts/gateway` lance
+  Apolo-emu depuis le 25 octobre 2026 (dossier non versionné, ancienne passerelle
+  `gateway/apollo2spd.py` conservée mais inutilisée).
 
 Règles strictes :
 
-- Les lire librement ; **ne jamais** modifier leurs fichiers, leurs VM, leurs
-  configurations QEMU, ni interrompre leurs processus.
+- Les lire librement. Les modifier, toucher à leurs VM ou à leurs configurations QEMU,
+  ou interrompre leurs processus seulement sur demande explicite de l'utilisateur, en
+  suivant leur propre guide (`AGENT.md`, `docs/REPRISE.md`). Un changement d'option ou
+  d'extension d'Apolo-emu peut modifier leur comportement : vérifier leurs scripts.
 - Ne pas lancer leurs machines virtuelles sans nécessité **et** autorisation
   explicite de l'utilisateur.
 - Leurs passerelles sont des prototypes : identifier ce qui est correct, approximatif
@@ -126,7 +132,7 @@ VM (DOS / Windows / OS/2) → pilote Apollo II → COM1 → UART émulée QEMU
   SSML et `INDEX_MARKS` de Speech Dispatcher, vérifier leur prise en charge
   effective). Sinon, comportement déterministe et limite documentée.
 - Éviter le découpage systématique en un message par mot.
-- Extensions non authentiques (p. ex. variantes de `@I` utilisées par Épaulard) :
+- Extensions non authentiques (p. ex. l'ancien `@I<c>` d'Épaulard) :
   isolées, documentées, **désactivées par défaut**, sans jamais modifier le sens
   d'une commande Apollo II authentique.
 
@@ -197,5 +203,7 @@ les étapes, mais respect strict de l'intégrité des projets voisins.
   consomme un numéro de port : le lanceur doit compter lui-même.
 - Avec un chardev socket, l'invité voit MSR = 0xB0 (CTS, DSR, DCD actifs) : aucun
   contrôle de flux n'est possible.
-- Une VM du projet `os2` peut tourner : ne jamais la toucher. Pour les essais réels,
-  utiliser la priorité SSIP `notification` et un volume bas.
+- Une VM d'un projet voisin peut tourner : ne pas la toucher sans demande. Arrêt
+  propre d'OS/2 : menu Arrêt du bureau, puis QMP `quit` (voir `../os2/docs/REPRISE.md`).
+  Pour les essais automatiques de parole réelle, utiliser la priorité SSIP
+  `notification` et un volume bas.

@@ -11,8 +11,9 @@ s'accordent pas exactement avec la ROM 2.01. Elles obéissent à trois règles :
 
 ## `epaulard-index`
 
-C'est l'extension `@I<c>` de la passerelle `pc486`, utilisée par Épaulard.
-- **Ce qu'envoie Épaulard** : `^X`, puis `@IA.`, puis le texte et CR. Il attend l'octet `A` quand ce texte a été
+C'est l'extension `@I<c>` de l'ancienne passerelle `pc486`, utilisée par Épaulard jusqu'au 25 octobre 2026.
+Épaulard emploie désormais l'écho authentique `@E` ; l'extension reste pour ses anciennes versions.
+- **Ce qu'envoyait Épaulard** : `^X`, puis `@IA.`, puis le texte et CR. Il attend l'octet `A` quand ce texte a été
   entièrement prononcé, et ne l'attend plus après une annulation.
 - **Sur un vrai Apollo II**, `@IA.` n'est pas une commande : l'appareil prononcerait « I A » et ne renverrait
   rien.
@@ -20,8 +21,8 @@ C'est l'extension `@I<c>` de la passerelle `pc486`, utilisée par Épaulard.
   - `@I` suivi d'un caractère autre que `+`, `?` et `^` mémorise ce caractère ;
   - il est renvoyé à la fin effective de la parole (événement END) de la prochaine proposition terminée par CR ;
   - il n'est jamais renvoyé après un mute.
-- **Équivalent authentique** : `texte<CR>@Ec<CR>` (APOLLO.TXT). Il fonctionne sans extension, et Épaulard
-  pourrait l'adopter.
+- **Équivalent authentique** : `texte<CR>@Ec<CR>` (APOLLO.TXT), sans extension. C'est ce qu'envoie Épaulard
+  aujourd'hui.
 
 ## `word-echo`
 
@@ -50,4 +51,7 @@ C'est le `--burst-gap` de la passerelle `pc486`.
 - **Avec l'extension** : si un envoi arrive alors que la parole est en cours, qu'aucune proposition n'est en
   cours de réception, et que plus de 40 ms se sont écoulées depuis l'octet précédent, la parole en cours est
   coupée comme par un mute.
+- **Exception** : la parole n'est jamais coupée tant qu'un écho `@E` (ou une marque `epaulard-index`) attend
+  encore d'être renvoyé. L'invité synchronise alors lui-même sa file, comme Épaulard pendant le « dire tout »,
+  et coupe la parole par Ctrl-X quand il le veut. La même configuration sert ainsi à Sonolect et à Épaulard.
 - C'est une heuristique, sans équivalent sur l'appareil.

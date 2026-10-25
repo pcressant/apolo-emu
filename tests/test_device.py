@@ -399,6 +399,27 @@ class ExtensionTests(DeviceTestCase):
         self.assertEqual(backend.cancels, 1)
         self.assertEqual(backend.texts[-1], "r ")
 
+    def test_burst_interrupt_spares_awaited_echo(self):
+        # Épaulard (dire tout) : « ligne\r@EA\r », puis la ligne suivante d'avance.
+        backend = FakeBackend()
+        replies = []
+        dev = ApolloDevice(backend, replies.append,
+                           DeviceConfig(extensions=frozenset({"burst-interrupt"})),
+                           clock=lambda: self.now)
+        dev.feed(b"ligne un\r@EA\r")
+        backend.begin()
+        self.now += 0.5
+        dev.feed(b"ligne deux\r@EB\r")
+        self.assertEqual(backend.cancels, 0)
+        backend.finish()
+        self.assertEqual(b"".join(replies), b"A")
+        backend.begin()
+        self.now += 0.5
+        dev.feed(b"touche\r")  # l'écho B est encore attendu : pas de coupure
+        self.assertEqual(backend.cancels, 0)
+        backend.finish_all()
+        self.assertEqual(b"".join(replies), b"AB")
+
     def test_unknown_extension_rejected(self):
         with self.assertRaises(ValueError):
             DeviceConfig(extensions=frozenset({"nope"}))

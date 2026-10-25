@@ -110,7 +110,8 @@ Elles concernent `../pc486/gateway/apollo2spd.py` et sa copie dans `../os2/gatew
    particulier :
    - si Screen Reader/2 attend les échos `@e` avant de continuer ;
    - si le suivi par proposition lui convient, ou s'il faut `word-echo`.
-2. **Côté Épaulard** : passer à l'idiome authentique `@E`, ou à `@I+` / `@I?`, pour se passer d'extension.
+2. **Côté Épaulard** : fait le 25 octobre 2026, Épaulard envoie `texte CR @E<c> CR` et n'a plus besoin
+   d'extension. `pc486` et `os2` lancent désormais Apolo-emu à la place de leurs passerelles.
 3. **Pauses `@D` et `@Q`** : les rendre par des `<break>` SSML, après étalonnage.
 4. **Effets sonores `@T`** : courts fichiers audio (SSML `<audio>` ou icônes sonores de Speech Dispatcher), si le
    module les gère.

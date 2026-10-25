@@ -32,7 +32,7 @@ EXTENSIONS = {
     "epaulard-index": "@I<c> renvoie c à la fin de la prochaine proposition terminée par CR (Épaulard).",
     "word-echo": "@E renvoie son octet à sa position exacte dans la parole, et non au début de la proposition.",
     "lenient-speed": "@W accepte un chiffre hexadécimal : 0 vaut 1, A à F valent 9 (profils Screen Reader/2).",
-    "burst-interrupt": "un nouvel envoi après un silence interrompt la parole en cours (Sonolect).",
+    "burst-interrupt": "un nouvel envoi après un silence interrompt la parole en cours, sauf écho attendu (Sonolect).",
 }
 
 # Langues par défaut des emplacements de ROM et indicatifs téléphoniques utilisés par @L.
@@ -194,6 +194,7 @@ class ApolloDevice:
             and data[0] not in P.MUTE_BYTES
             and self.talking
             and self.clauses.pending == 0
+            and not self._echo_awaited()
         ):
             log.debug("burst-interrupt : interruption implicite")
             self.mute()
@@ -237,6 +238,7 @@ class ApolloDevice:
     def mute(self) -> None:
         """Ctrl-A / Ctrl-X : silence immédiat, tampons vidés, compteur d'index conservé."""
         had_speech = any(isinstance(e, _Spoken) for e in self.timeline)
+        log.info("mute (Ctrl-X ou Ctrl-A)")
         self.cmd_mode = False
         self.cmd_buf.clear()
         self.clauses.reset()
@@ -430,7 +432,19 @@ class ApolloDevice:
     # ------------------------------------------------------------- actions
 
     def _echo_action(self, arg: int) -> Action:
-        return lambda: self.reply(bytes((arg,)))
+        def echo() -> None:
+            self.reply(bytes((arg,)))
+
+        echo.is_echo = True  # type: ignore[attr-defined]
+        return echo
+
+    def _echo_awaited(self) -> bool:
+        """Un écho (@E, extension @I<c>) attend encore que la parole l'atteigne."""
+        for e in [*self.timeline, *self.batch]:
+            groups = [e.actions] if isinstance(e, _Immediate) else [a for _, a in e.marks]
+            if any(getattr(action, "is_echo", False) for g in groups for action in g):
+                return True
+        return False
 
     def _index_spoken(self) -> None:
         if self.index_count:
@@ -557,6 +571,7 @@ class ApolloDevice:
         for entry in batch:
             self.timeline.append(entry)
             if isinstance(entry, _Spoken):
+                log.info("parole %d : %s", entry.utt.uid, entry.utt.text)
                 self.backend.speak(entry.utt)
         self._pump()
 

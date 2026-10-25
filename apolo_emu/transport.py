@@ -55,6 +55,8 @@ class Trace:
     def __init__(self, stream: IO[str]) -> None:
         self.stream = stream
         self.t0 = time.monotonic()
+        stream.write(f"# début {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        stream.flush()
 
     def record(self, direction: str, data: bytes) -> None:
         self.stream.write(f"{time.monotonic() - self.t0:10.4f} {direction} {data.hex(' ')}\n")

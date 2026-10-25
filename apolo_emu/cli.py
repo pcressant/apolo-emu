@@ -89,7 +89,8 @@ def _options(ns: argparse.Namespace) -> Options:
 
 
 def _setup_logging(level: str) -> None:
-    logging.basicConfig(level=level.upper(), format="apolo-emu %(levelname)s %(name)s: %(message)s",
+    logging.basicConfig(level=level.upper(), format="%(asctime)s apolo-emu %(levelname)s %(name)s: %(message)s",
+                        datefmt="%H:%M:%S",
                         stream=sys.stderr)
 
 

@@ -111,4 +111,6 @@ L'appareil n'est jamais appelé en parallèle. Un appel réentrant (un backend q
 - Le niveau `debug` détaille chaque lecture et chaque événement vocal.
 - `--trace FICHIER` ajoute une ligne par lecture ou écriture sur le port série :
   `secondes RX|TX octets-hexadécimaux`, par exemple `   12.3456 RX 40 49 3f`.
+  Le fichier est ouvert en ajout ; chaque démarrage écrit d'abord une ligne `# début AAAA-MM-JJ hh:mm:ss`,
+  origine des secondes qui suivent.
   Ce format permet de rejouer ou d'analyser une session.
