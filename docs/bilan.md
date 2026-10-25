@@ -57,9 +57,11 @@ celui de la parole réelle, qui s'active avec `APOLO_EMU_SPEECHD=1`. Lancé sép
 
 `nix-build` relance toute la suite dans le bac à sable de Nix, avec le même résultat.
 
-**Non fait, faute d'autorisation** : aucun essai avec Sonolect, Épaulard ou Screen Reader/2 sur les VM des
-projets voisins. Ces VM n'ont été ni lancées ni modifiées ; une VM OS/2 tournait pendant le développement et n'a
-pas été touchée.
+**Essais avec les logiciels d'époque** (25 octobre 2026, à l'oreille, par l'utilisateur, sous 86Box) :
+- Sonolect 7.11 sous MS-DOS 6.22 : fonctionne (annonce de démarrage, invite, frappe, lecture), avec
+  `--language fr --codepage cp850 --extension burst-interrupt --no-volume` ;
+- Épaulard sous Windows 3.11, modifié pour l'écho authentique `@E` : fonctionne, dire tout compris ;
+- Screen Reader/2 sous OS/2 : pas encore essayé avec Apolo-emu.
 
 ## Limites de fidélité
 
