@@ -31,8 +31,8 @@ Priorités, dans l'ordre :
 
 ## Reprendre rapidement
 
-1. Lire ce guide, puis `git status --short` et `git log -6 --oneline` si le dépôt
-   est versionné ; préserver les modifications existantes.
+1. Lire ce guide, puis `git status --short` et `git log -6 --oneline` ; préserver
+   les modifications existantes.
 2. Consulter `docs/` (protocole, architecture, matrice de compatibilité,
    limitations) avant de modifier un comportement.
 3. Faire une modification ciblée, exécuter les tests adaptés et indiquer clairement
@@ -40,6 +40,23 @@ Priorités, dans l'ordre :
    une VM.
 4. Mettre à jour la documentation et la matrice de compatibilité si le comportement
    change. Ajouter ici les pièges durables, pas un journal de session.
+
+## Carte du dépôt
+
+| Chemin | Rôle |
+|---|---|
+| `apolo_emu/protocol.py` | tables et fonctions pures : motifs, `hex_value`, propositions |
+| `apolo_emu/device.py` | l'appareil : deux étages, registres, chronologie, extensions |
+| `apolo_emu/speech.py`, `mapping.py`, `ssip.py` | interface vocale, correspondance SSIP, client SSIP |
+| `apolo_emu/transport.py` | socket Unix (écoute ou connexion), trace des octets |
+| `apolo_emu/app.py`, `launcher.py`, `cli.py` | assemblage, lanceur QEMU, ligne de commande |
+| `tests/` | unittest ; `fakes.py` (faux backend), `fake_qemu.py`, `guest.py` (secteur d'amorçage) |
+| `docs/protocole.md` | référence du protocole, avec la source de chaque point |
+| `docs/compatibilite.md`, `limitations.md`, `bilan.md` | état, limites, compte rendu |
+
+Tests : `python3 -m unittest discover -s tests -t .` (environ 4 s ; QEMU utilisé s'il
+est présent). Parole réelle : `APOLO_EMU_SPEECHD=1 python3 -m unittest
+tests.test_speechd_integration`. `nix-build` relance la suite.
 
 ## Projets voisins : lecture seule
 
@@ -167,4 +184,18 @@ les étapes, mais respect strict de l'intégrité des projets voisins.
 
 ## Pièges connus
 
-(À compléter au fil du projet.)
+- La ponctuation `. , : ; ! ?` termine une proposition, comme CR : `?` dans `@W?`
+  ferme la proposition. Beaucoup d'attentes de tests fausses venaient de là.
+- `*` dans un motif accepte n'importe quel caractère, y compris `@` : `@Mz@M2A`
+  consomme le second `@` (comportement de la ROM, voulu).
+- Les effets d'une proposition (échos, réponses `@c?`) attendent que la parole
+  l'atteigne : un test doit faire avancer le faux backend (`begin`, `reach`, `finish`).
+- `@I?` répond immédiatement, avant les échos des propositions encore en attente.
+- eSpeak signale une marque finale un peu avant END : les actions d'une proposition
+  muette en fin de lot sont exécutées à END, pas sur une marque.
+- QEMU 10.2 accepte deux UART au même emplacement sans erreur, et `-serial none`
+  consomme un numéro de port : le lanceur doit compter lui-même.
+- Avec un chardev socket, l'invité voit MSR = 0xB0 (CTS, DSR, DCD actifs) : aucun
+  contrôle de flux n'est possible.
+- Une VM du projet `os2` peut tourner : ne jamais la toucher. Pour les essais réels,
+  utiliser la priorité SSIP `notification` et un volume bas.
