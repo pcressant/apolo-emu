@@ -8,7 +8,7 @@ from apolo_emu.ssip import SSIPBackend, escape_data, to_ssml
 
 
 class FakeSpeechd:
-    """Serveur SSIP minimal : enregistre les commandes, émet les événements à la demande."""
+    """Minimal SSIP server: record commands and emit events on demand."""
 
     def __init__(self, path: str, refuse_speak: bool = False) -> None:
         self.path = path
@@ -75,7 +75,7 @@ async def until(cond, timeout=2.0):
     end = loop.time() + timeout
     while not cond():
         if loop.time() > end:
-            raise AssertionError("délai dépassé")
+            raise AssertionError("timed out")
         await asyncio.sleep(0.005)
 
 
@@ -138,14 +138,14 @@ class SSIPTests(unittest.IsolatedAsyncioTestCase):
         self.be.speak(Utterance(2, VoiceParams(), ["b"]))
         self.be.cancel()
         await until(lambda: "CANCEL self" in self.server.commands)
-        self.assertEqual(len(self.server.bodies), 1)  # le second n'a jamais été transmis
+        self.assertEqual(len(self.server.bodies), 1)  # the second was never submitted
 
     async def test_disconnect_releases_sent_utterances(self):
         self.be.speak(Utterance(9, VoiceParams(), ["a"]))
         await until(lambda: self.server.bodies)
         self.server.writer.close()
         await until(lambda: any(e.uid == 9 and e.kind == "end" for e in self.events))
-        # Reconnexion automatique au prochain énoncé, réglages renvoyés.
+        # Automatically reconnect on the next utterance and resend settings.
         self.be.speak(Utterance(10, VoiceParams(), ["b"]))
         await until(lambda: len(self.server.bodies) == 2)
         self.assertEqual(self.server.connections, 2)

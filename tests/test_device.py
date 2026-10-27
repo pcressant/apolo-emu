@@ -52,7 +52,7 @@ class TextTests(DeviceTestCase):
         self.assertEqual(self.backend.texts, ["first sentence.  second,  third "])
 
     def test_settings_apply_to_whole_clause(self):
-        # TB25 §6.2 : « An @B4 apple a day @V5 keeps the doctor away. » — voix 5 pour toute la phrase.
+        # TB25 §6.2: voice 5 applies to the entire clause in the example below.
         self.feed(b"An apple a day @V5 keeps the doctor away.")
         self.assertEqual(self.backend.spoken[0].params.voice, 5)
 
@@ -63,7 +63,7 @@ class TextTests(DeviceTestCase):
     def test_rejected_speed_kept(self):
         self.feed(b"@W0@Wb x\r")
         self.assertEqual(self.backend.spoken[0].params.speed, 3)
-        # @Wb n'est pas une commande pour la ROM : reste dans le texte, @ rendu muet.
+        # @Wb is not a ROM command: stays in text, with @ silenced.
         self.assertIn("Wb", self.backend.texts[0])
         self.assertNotIn("@", self.backend.texts[0])
 
@@ -72,7 +72,7 @@ class TextTests(DeviceTestCase):
         self.assertEqual(self.backend.texts, ["a b c "])
 
     def test_codepage(self):
-        self.feed(b"\x82t\x82\r")  # « été » en CP437/CP850
+        self.feed(b"\x82t\x82\r")  # French 'été' in CP437/CP850 (encoding test data)
         self.assertEqual(self.backend.texts, ["été "])
 
     def test_punctuation_only_is_silent(self):
@@ -106,7 +106,7 @@ class MuteTests(DeviceTestCase):
         self.assertEqual(self.backend.texts, ["kept "])
 
     def test_mute_inside_command(self):
-        # La passerelle prototype avalait Ctrl-X après « @ ».
+        # The prototype gateway swallowed Ctrl-X after @.
         self.feed(b"text\r")
         self.feed(b"@\x18")
         self.assertEqual(self.backend.cancels, 1)
@@ -141,7 +141,7 @@ class EchoTests(DeviceTestCase):
         self.assertEqual(self.take_replies(), b"z")
 
     def test_documented_end_of_text_idiom(self):
-        # APOLLO.TXT : "texte"<CR>@Ex<CR> -> x revient quand le texte est fini.
+        # APOLLO.TXT: text<CR>@Ex<CR> -> x returns after text finishes.
         self.feed(b"text to speak\r@Ex\r")
         self.assertEqual(self.take_replies(), b"")
         self.backend.begin()
@@ -154,15 +154,15 @@ class EchoTests(DeviceTestCase):
         self.feed(b"second @E1 part.")
         utt = self.backend.spoken[1]
         self.assertEqual(self.take_replies(), b"")
-        self.backend.finish()  # fin de « first »
+        self.backend.finish()  # end of 'first'
         self.backend.begin()
         self.assertEqual(self.take_replies(), b"")
-        self.backend.reach(0)  # marque de début de proposition
+        self.backend.reach(0)  # clause-start mark
         self.assertEqual(self.take_replies(), b"1")
         self.assertEqual(self.backend.mark_positions(utt)[0][1], "")
 
     def test_srd2_word_echoes_are_per_clause(self):
-        # Screen Reader/2 : @e<TAB> avant chaque mot, puis « . » et CR.
+        # Screen Reader/2: @e<TAB> before each word, then . and CR.
         self.feed(b"@e\t o @e\t a @e\thyphen @e\tworld. \r")
         self.assertEqual(self.backend.texts[0].split(), ["o", "a", "hyphen", "world."])
         self.assertEqual(len(self.backend.spoken), 1)
@@ -180,7 +180,7 @@ class EchoTests(DeviceTestCase):
 
     def test_silent_clause_between_texts_is_a_junction_mark(self):
         self.feed(b"one\r@E1\rtwo\r")
-        self.assertEqual(len(self.backend.spoken), 1)  # un seul message fluide
+        self.assertEqual(len(self.backend.spoken), 1)  # one fluent message
         utt = self.backend.spoken[0]
         self.assertEqual([t for _, t in self.backend.mark_positions(utt)], ["one "])
         self.backend.reach(0)
@@ -200,7 +200,7 @@ class EchoTests(DeviceTestCase):
         self.feed(b"one\r")
         self.feed(b"two @Eb\r")
         self.feed(b"@Ec\r")
-        self.backend.queue.pop(0)  # « one » terminé sans notification
+        self.backend.queue.pop(0)  # 'one' finished without notification
         self.backend.finish()
         self.assertEqual(self.take_replies(), b"bc")
 
@@ -268,8 +268,8 @@ class QueryTests(DeviceTestCase):
         self.assertEqual(self.take_replies(), b"P10MA2F80W70")
 
     def test_star_pattern_swallows_next_cmd_char(self):
-        # « M** » accepte n'importe quel caractère : « @Mz@ » est reconnu puis rejeté,
-        # et le « @ » suivant est consommé (comportement de la ROM).
+        # 'M**' accepts any character: '@Mz@' is recognized then rejected,
+        # and the next @ is consumed (ROM behavior).
         self.feed(b"@Mz@M2A x.")
         self.assertEqual(self.backend.texts, ["M2A x. "])
         self.backend.finish_all()
@@ -309,7 +309,7 @@ class QueryTests(DeviceTestCase):
     def test_soft_reset(self):
         self.feed(b"@W8@F2@V4@J@W?@F?@V?")
         self.assertEqual(self.take_replies(), b"W30F80V10")
-        # @A est synchronisé avec la parole : il agit après @J dans la même proposition.
+        # @A is speech-synchronized: it takes effect after @J within the same clause.
         self.feed(b"@A2@J.@A?")
         self.assertEqual(self.take_replies(), b"A20")
 
@@ -338,13 +338,13 @@ class BacklogTests(DeviceTestCase):
     def test_overflow_warning(self):
         with self.assertLogs("apolo_emu.device", "WARNING") as cm:
             self.feed(b"word " * 2000 + b"\r")
-        self.assertIn("aurait perdu", cm.output[0])
-        self.assertEqual(len(self.backend.spoken), 1)  # rien n'est jeté
+            self.assertIn("would have lost", cm.output[0])
+        self.assertEqual(len(self.backend.spoken), 1)  # nothing is discarded
 
 
 class ExtensionTests(DeviceTestCase):
     def test_epaulard_index_disabled_by_default(self):
-        self.feed(b"\x18@IA.Paragraphe un.\r")
+        self.feed(b"\x18@IA.Paragraph one.\r")
         self.backend.finish_all()
         self.assertEqual(self.take_replies(), b"")
         self.assertIn("IA", self.backend.texts[0])
@@ -352,14 +352,14 @@ class ExtensionTests(DeviceTestCase):
     def test_epaulard_index(self):
         backend = FakeBackend()
         dev = ApolloDevice(backend, self.replies.extend, DeviceConfig(extensions=frozenset({"epaulard-index"})))
-        dev.feed(b"\x18@IA.Paragraphe 001 : essai de lecture continue.\r")
-        # « : » et « . » ferment des propositions ; un seul message, la marque à la fin.
-        self.assertEqual(backend.texts, ["Paragraphe 001 :  essai de lecture continue. "])
+        dev.feed(b"\x18@IA.Paragraph 001 : continuous reading test.\r")
+        # : and . end clauses; one message, mark at the end.
+        self.assertEqual(backend.texts, ["Paragraph 001 :  continuous reading test. "])
         backend.begin()
         self.assertEqual(self.take_replies(), b"")
         backend.finish()
         self.assertEqual(self.take_replies(), b"A")
-        # Les commandes authentiques gardent leur sens.
+        # Authentic commands retain their meanings.
         dev.feed(b"@I+x\r@I?")
         self.assertEqual(self.take_replies(), b"I10T")
 
@@ -392,7 +392,7 @@ class ExtensionTests(DeviceTestCase):
                            clock=lambda: self.now)
         dev.feed(b"d\r")
         self.now += 0.01
-        dev.feed(b"i\r")  # même rafale
+        dev.feed(b"i\r")  # same burst
         self.assertEqual(backend.cancels, 0)
         self.now += 0.5
         dev.feed(b"r\r")
@@ -400,7 +400,7 @@ class ExtensionTests(DeviceTestCase):
         self.assertEqual(backend.texts[-1], "r ")
 
     def test_burst_interrupt_spares_awaited_echo(self):
-        # Épaulard (dire tout) : « ligne\r@EA\r », puis la ligne suivante d'avance.
+        # Épaulard (read all): 'line\r@EA\r', then queue the next line ahead of time.
         backend = FakeBackend()
         replies = []
         dev = ApolloDevice(backend, replies.append,
@@ -415,7 +415,7 @@ class ExtensionTests(DeviceTestCase):
         self.assertEqual(b"".join(replies), b"A")
         backend.begin()
         self.now += 0.5
-        dev.feed(b"touche\r")  # l'écho B est encore attendu : pas de coupure
+        dev.feed(b"touche\r")  # echo B is still pending: do not interrupt
         self.assertEqual(backend.cancels, 0)
         backend.finish_all()
         self.assertEqual(b"".join(replies), b"AB")

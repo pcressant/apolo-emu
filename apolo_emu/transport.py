@@ -1,8 +1,8 @@
-"""Transport série : relie l'appareil à une socket Unix (côté QEMU : chardev socket).
+"""Serial transport: connect the device to a Unix socket (QEMU socket chardev).
 
-Une socket ne transporte que des octets : RTS, CTS, DTR et DSR ne la traversent
-pas, et l'UART émulée par QEMU voit CTS, DSR et DCD actifs en permanence
-(docs/transport-serie.md). Aucun contrôle de flux n'est donc émulé ici.
+Sockets carry bytes only, not RTS, CTS, DTR or DSR. QEMU's emulated UART
+sees CTS, DSR and DCD permanently asserted (docs/serial-transport.md).
+No flow control is emulated here.
 """
 
 from __future__ import annotations
@@ -27,35 +27,35 @@ class SocketInUse(Exception):
 
 
 def prepare_listen_path(path: str) -> None:
-    """Supprime une socket obsolète ; refuse un chemin utilisé ou qui n'est pas une socket."""
+    """Remove a stale socket; reject a path in use or a non-socket path."""
     try:
         st = os.lstat(path)
     except FileNotFoundError:
         return
     if not stat.S_ISSOCK(st.st_mode):
-        raise SocketInUse(f"{path} existe et n'est pas une socket : refus de le remplacer")
+        raise SocketInUse(f"{path} exists and is not a socket: refusing to replace it")
     probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     try:
         probe.settimeout(1.0)
         probe.connect(path)
     except (ConnectionRefusedError, FileNotFoundError):
-        log.info("socket obsolète supprimée : %s", path)
+        log.info("removed stale socket: %s", path)
         os.unlink(path)
         return
     except OSError as e:
         raise SocketInUse(f"{path} : {e}") from e
     finally:
         probe.close()
-    raise SocketInUse(f"{path} est déjà utilisée par un autre processus")
+    raise SocketInUse(f"{path} is already in use by another process")
 
 
 class Trace:
-    """Journal horodaté des octets échangés (format décrit dans docs/architecture.md)."""
+    """Timestamped byte log (format documented in docs/architecture.md)."""
 
     def __init__(self, stream: IO[str]) -> None:
         self.stream = stream
         self.t0 = time.monotonic()
-        stream.write(f"# début {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        stream.write(f"# start {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         stream.flush()
 
     def record(self, direction: str, data: bytes) -> None:
@@ -64,7 +64,7 @@ class Trace:
 
 
 class SerialLink:
-    """Une seule connexion à la fois, comme un câble série."""
+    """One connection at a time, like a serial cable."""
 
     def __init__(self, device: ApolloDevice, trace: Trace | None = None) -> None:
         self.device = device
@@ -81,13 +81,13 @@ class SerialLink:
             self.trace.record("TX", data)
         if self._writer is None or self._writer.is_closing():
             self.dropped_replies += len(data)
-            log.warning("réponse perdue, port série non connecté : %s", data.hex(" "))
+            log.warning("reply lost, serial port disconnected: %s", data.hex(" "))
             return
         self._writer.write(data)
 
     async def _session(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         if self._writer is not None and not self._writer.is_closing():
-            log.warning("seconde connexion refusée : le port série est déjà relié")
+            log.warning("second connection rejected: serial port already connected")
             writer.close()
             try:
                 await writer.wait_closed()
@@ -96,7 +96,7 @@ class SerialLink:
             return
         self._writer = writer
         self.connected.set()
-        log.info("port série relié")
+        log.info("serial port connected")
         try:
             while True:
                 data = await reader.read(READ_SIZE)
@@ -107,13 +107,13 @@ class SerialLink:
                 log.debug("RX %s", data.hex(" "))
                 self.device.feed(data)
         except (ConnectionError, OSError) as e:
-            log.warning("port série : %s", e)
+            log.warning("serial port: %s", e)
         finally:
             if self._writer is writer:
                 self._writer = None
                 self.connected.clear()
             writer.close()
-            log.info("port série débranché")
+            log.info("serial port disconnected")
 
     async def listen(self, path: str) -> None:
         prepare_listen_path(path)
@@ -123,17 +123,17 @@ class SerialLink:
         finally:
             os.umask(old)
         self._path = path
-        log.info("en écoute sur %s", path)
+        log.info("listening on %s", path)
 
     async def connect_forever(self, path: str, retry: float = 1.0) -> None:
-        """Client d'un chardev QEMU serveur (server=on) ; se reconnecte indéfiniment."""
+        """Client for a QEMU server chardev (server=on); reconnect indefinitely."""
         announced = False
         while True:
             try:
                 reader, writer = await asyncio.open_unix_connection(path)
             except (FileNotFoundError, ConnectionRefusedError) as e:
                 if not announced:
-                    log.info("attente de %s (%s)", path, e.__class__.__name__)
+                    log.info("waiting for %s (%s)", path, e.__class__.__name__)
                     announced = True
                 await asyncio.sleep(retry)
                 continue

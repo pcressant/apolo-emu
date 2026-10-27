@@ -1,4 +1,4 @@
-"""Faux backend vocal : enregistre les énoncés et laisse le test piloter la progression."""
+"""Fake speech backend: record utterances and let tests control progress."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from apolo_emu.speech import Mark, SpeechEvent, Utterance
 class FakeBackend:
     def __init__(self) -> None:
         self.sink = None
-        self.queue: list[Utterance] = []  # énoncés reçus et pas encore terminés
-        self.spoken: list[Utterance] = []  # tous les énoncés reçus
+        self.queue: list[Utterance] = []  # received utterances not yet finished
+        self.spoken: list[Utterance] = []  # all received utterances
         self.cancels = 0
 
     def set_event_sink(self, sink) -> None:
@@ -31,7 +31,7 @@ class FakeBackend:
     async def close(self) -> None:
         pass
 
-    # --- pilotage par le test
+    # --- test controls
 
     @property
     def texts(self) -> list[str]:
@@ -43,7 +43,7 @@ class FakeBackend:
         return utt
 
     def reach(self, n: int) -> None:
-        """La parole atteint la n-ième marque (à partir de 0) de l'énoncé en cours."""
+        """Speech reaches mark n (zero-based) in the current utterance."""
         utt = self.queue[0]
         self.sink(SpeechEvent(utt.uid, "mark", utt.marks[n]))
 
@@ -57,7 +57,7 @@ class FakeBackend:
             self.finish()
 
     def mark_positions(self, utt: Utterance) -> list[tuple[str, str]]:
-        """(nom de marque, texte qui la précède) pour vérifier les positions."""
+        """(mark name, preceding text) for checking positions."""
         out, text = [], ""
         for p in utt.parts:
             if isinstance(p, Mark):

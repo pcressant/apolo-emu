@@ -1,8 +1,8 @@
-"""Tables et fonctions pures du protocole Apollo II.
+"""Pure Apollo II protocol tables and functions.
 
-Les tables suivent la ROM UK V2.01 4.04 telle que la décrit la décompilation
-« Dolphin-Apollo-II-Reborn », recoupée avec la documentation Dolphin (voir
-docs/protocole.md). Rien ici ne dépend du transport ni du moteur vocal.
+Tables follow UK ROM V2.01 4.04 as described by the Dolphin-Apollo-II-Reborn
+decompilation, cross-checked against Dolphin documentation (docs/protocol.md).
+Nothing here depends on the transport or speech engine.
 """
 
 from __future__ import annotations
@@ -14,18 +14,18 @@ CTRL_X = 0x18
 MUTE_BYTES = frozenset((CTRL_A, CTRL_X))
 CR = 0x0D
 SPACE = 0x20
-DEFAULT_CMD_CHAR = 0x40  # « @ »
+DEFAULT_CMD_CHAR = 0x40  # '@'
 
-# Fin de proposition (ROM : boot_get_clause / take_byte).
+# Clause terminators (ROM: boot_get_clause / take_byte).
 CLAUSE_PUNCT = frozenset(b".,:;!?")
-CLAUSE_SPACE_END = 220  # à partir d'ici, une espace ou un @ termine la proposition
-CLAUSE_FULL = 250  # longueur maximale d'une proposition
+CLAUSE_SPACE_END = 220  # from this point, a space or @ ends the clause
+CLAUSE_FULL = 250  # maximum clause length
 
 HEX_DIGITS = b"0123456789ABCDEF"
 
 
 def upcase(b: int) -> int:
-    """Équivalent de cmd_case_map pour la partie ASCII (la seule utile aux motifs)."""
+    """ASCII equivalent of cmd_case_map (the only part used by patterns)."""
     if 0x61 <= b <= 0x7A:
         return b - 0x20
     if b == 0x5B:
@@ -40,27 +40,32 @@ def upcase(b: int) -> int:
 
 
 def hex_value(b: int) -> int:
-    """cmd_hex_value : 0-9 pour les chiffres, 10-35 pour A-Z, valeurs hors plage sinon."""
+    """Protocol numeric value, including out-of-range results.
+
+    Intervals describe observed inputs and outputs rather than simulating
+    the synthesizer processor's arithmetic instructions.
+    """
     a = upcase(b)
-    if 0x3A <= a < 0x41:
-        a = 0x5A  # « : » à « @ » comptent comme Z
-    d = (a - 0x41) & 0xFF
-    return (d + 0x11) & 0xFF if d & 0x80 else (d + 0x0A) & 0xFF
+    if ord(":") <= a <= ord("@"):
+        return 35
+    if ord("A") <= a <= 192:
+        return a - ord("A") + 10
+    return (a - ord("0")) % 256
 
 
 def hex_reply(value: int) -> bytes:
-    """Valeur d'un octet en deux chiffres hexadécimaux, quartet bas d'abord (ser_tx_hex)."""
+    """Byte value as two hexadecimal digits, low nibble first (ser_tx_hex)."""
     value &= 0xFF
     return bytes((HEX_DIGITS[value & 0x0F], HEX_DIGITS[value >> 4]))
 
 
-# Motifs : « * » n'importe quel caractère, « # » un chiffre ; comparés après upcase().
+# Patterns: '*' matches any character, '#' a digit; compared after upcase().
 IMMEDIATE_PATTERNS: tuple[tuple[bytes, str], ...] = (
     (b"I+", "index_add"),
     (b"I?", "index_query"),
 )
 
-# Table différée, dans l'ordre de la ROM (la première correspondance l'emporte).
+# Deferred table in ROM order (first match wins).
 DEFERRED_PATTERNS: tuple[tuple[bytes, str], ...] = (
     (b"?", "version"),
     (b"*?", "query"),
@@ -94,19 +99,19 @@ DEFERRED_PATTERNS: tuple[tuple[bytes, str], ...] = (
     (b"+*", "ignore"),
 )
 
-# Documentée (manuel 1998) mais absente de la ROM 2.01 ; ajoutée en dernier.
+# Documented (1998 manual) but absent from ROM 2.01; appended last.
 SOFT_RESET_PATTERN = (b"J", "soft_reset")
 
-# Extensions désactivées par défaut (docs/extensions.md), toujours après les motifs authentiques.
+# Extensions disabled by default (docs/extensions.md), always after authentic patterns.
 EXT_EPAULARD_INDEX = (b"I*", "ext_epaulard_index")
 EXT_LENIENT_SPEED = (b"W*", "speed")
 
 
 def match_pattern(pattern: bytes, data: bytes, pos: int) -> int:
-    """Longueur reconnue de `pattern` à `data[pos:]`, ou 0.
+    """Matched length of `pattern` at `data[pos:]`, or 0.
 
-    Un motif qui dépasse la fin de la proposition n'est pas reconnu. La ROM lit
-    alors le contenu résiduel de son tampon : approximation documentée.
+    Patterns extending past the clause end are not recognized. The ROM reads
+    residual buffer contents there: a documented approximation.
     """
     if pos + len(pattern) > len(data):
         return 0
@@ -132,7 +137,7 @@ def match_table(table: tuple[tuple[bytes, str], ...], data: bytes, pos: int) -> 
 
 
 def immediate_state(buf: bytes) -> str | None:
-    """Mode commande immédiate : 'partial', le nom de la commande, ou None si aucun motif ne convient."""
+    """Immediate-command state: 'partial', command name, or None if no pattern matches."""
     partial = False
     for pattern, name in IMMEDIATE_PATTERNS:
         if len(buf) > len(pattern):
@@ -146,21 +151,21 @@ def immediate_state(buf: bytes) -> str | None:
 
 @dataclass(frozen=True)
 class Command:
-    """Commande différée reconnue dans une proposition."""
+    """Deferred command recognized within a clause."""
 
     name: str
-    raw: bytes  # octets reconnus après le caractère de commande, sans changement de casse
-    position: int  # position dans le texte de la proposition (avant laquelle elle s'applique)
+    raw: bytes  # recognized bytes after command character, preserving case
+    position: int  # position in clause text, before which the command applies
 
     @property
     def arg(self) -> int:
-        """Dernier octet reconnu : l'argument tel que le reçoit le gestionnaire de la ROM."""
+        """Last recognized byte: argument as received by the ROM handler."""
         return self.raw[-1]
 
 
 @dataclass
 class Clause:
-    """Proposition analysée : texte (octets bruts) et commandes positionnées."""
+    """Parsed clause: raw text bytes and positioned commands."""
 
     text: bytes
     commands: list[Command]
@@ -174,7 +179,7 @@ def scan_clause(
     table: tuple[tuple[bytes, str], ...],
     ended_by_cr: bool = False,
 ) -> Clause:
-    """cmd_scan_clause : retire les commandes reconnues ; une commande inconnue reste dans le texte."""
+    """cmd_scan_clause: remove recognized commands; leave unknown commands in text."""
     text = bytearray()
     commands: list[Command] = []
     x = 0
@@ -195,10 +200,10 @@ def scan_clause(
 
 
 class ClauseAccumulator:
-    """Découpage du flux en propositions (boot_get_clause).
+    """Split the stream into clauses (boot_get_clause).
 
-    feed() renvoie les propositions complètes ; les octets d'une proposition
-    inachevée restent en attente indéfiniment, comme sur l'appareil.
+    Complete clauses are returned; bytes of an incomplete clause wait
+    indefinitely, just as on the device.
     """
 
     def __init__(self) -> None:
@@ -214,14 +219,14 @@ class ClauseAccumulator:
         return len(self.buf)
 
     def push(self, b: int, cmd_char: int) -> tuple[bytes, bool] | None:
-        """Ajoute un octet ; renvoie (proposition, terminée_par_CR) si elle est complète."""
+        """Add a byte; return (clause, ended_by_CR) when complete."""
         if not self.buf and self.carry is not None:
             self.buf.append(self.carry)
             self.carry = None
         if b == CR:
             return self._end(True)
         self.buf.append(b)
-        n = len(self.buf) + 1  # la ROM compte l'espace initiale de boot_clause
+        n = len(self.buf) + 1  # the ROM counts boot_clause's initial space
         if b in CLAUSE_PUNCT or n >= CLAUSE_FULL:
             return self._end(False)
         if n >= CLAUSE_SPACE_END:

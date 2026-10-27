@@ -1,10 +1,10 @@
-"""Secteur d'amorçage de test, assemblé ici (mode réel 16 bits, sans dépendance).
+"""Test boot sector assembled here (16-bit real mode, no dependencies).
 
-Le programme :
-1. programme l'UART (COM1 par défaut) en 9600 bauds 8N1, lève DTR, RTS et OUT2 ;
-2. écrit sur le port 0xE9 (debugcon de QEMU) le registre d'état modem (MSR) vu par l'invité ;
-3. envoie MESSAGE à l'Apollo, octet par octet, en attendant THRE ;
-4. recopie indéfiniment sur 0xE9 chaque octet reçu de l'Apollo.
+The program:
+1. configures the UART (COM1 by default) for 9600 baud 8N1, asserting DTR/RTS/OUT2;
+2. writes the guest-visible modem-status register (MSR) to QEMU debugcon port 0xE9;
+3. sends MESSAGE to Apollo byte by byte, waiting for THRE;
+4. copies each received Apollo byte to port 0xE9 indefinitely.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def boot_sector(message: bytes, port: int = COM1) -> bytes:
     a = Asm(0x7C00)
     a.emit(0xFA, 0x31, 0xC0, 0x8E, 0xD8, 0xFC)  # cli ; xor ax,ax ; mov ds,ax ; cld
     a.out(port + 3, 0x80)  # LCR : DLAB
-    a.out(port + 0, 12)  # diviseur 12 = 9600 bauds
+    a.out(port + 0, 12)  # divisor 12 = 9600 baud
     a.out(port + 1, 0)
     a.out(port + 3, 0x03)  # 8N1
     a.out(port + 4, 0x0B)  # MCR : DTR, RTS, OUT2
@@ -66,7 +66,7 @@ def boot_sector(message: bytes, port: int = COM1) -> bytes:
     a.emit(0xEC)  # in al, dx (MSR)
     a.mov_dx(DEBUGCON)
     a.emit(0xEE)
-    a.emit(0xBE, 0, 0)  # mov si, message (corrigé plus bas)
+    a.emit(0xBE, 0, 0)  # mov si, message (patched below)
     si_fix = len(a.code) - 2
     a.label("send")
     a.emit(0xAC)  # lodsb
@@ -83,7 +83,7 @@ def boot_sector(message: bytes, port: int = COM1) -> bytes:
     a.jcc(0xEB, "send")
     a.label("recv")
     a.mov_dx(port + 5)
-    a.emit(0xEC, 0xA8, 0x01)  # in al, dx ; test al, 1 (données prêtes)
+    a.emit(0xEC, 0xA8, 0x01)  # in al, dx ; test al, 1 (data ready)
     a.jcc(0x74, "recv")
     a.mov_dx(port)
     a.emit(0xEC)
@@ -95,7 +95,7 @@ def boot_sector(message: bytes, port: int = COM1) -> bytes:
     code = a.assemble()
     code = code[:si_fix] + struct.pack("<H", a.address("message")) + code[si_fix + 2 :]
     if len(code) > 510:
-        raise ValueError("message trop long pour un secteur d'amorçage")
+        raise ValueError("message too long for a boot sector")
     return code.ljust(510, b"\0") + b"\x55\xaa"
 
 

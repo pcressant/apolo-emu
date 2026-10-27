@@ -1,8 +1,10 @@
+[English](protocol.md) | Français
+
 # Protocole Apollo II — état des connaissances
 
 Ce document rassemble ce que l'on sait du protocole Apollo II. Il a été établi en phase 1 et sert de référence à
 l'implémentation. Il précise d'où vient chaque information et quel crédit on peut lui accorder. Les sources sont décrites dans
-[references.md](references.md).
+[references-fr.md](references-fr.md).
 
 ## Niveaux de confiance
 
@@ -133,7 +135,7 @@ Sources : [DOC 1998] et [ROM].
 
 ## 3. Commandes Apollo II
 
-L'état d'implémentation est suivi dans [compatibilite.md](compatibilite.md). Ce tableau indique la syntaxe reconnue par la ROM 2.01, comparée à la documentation.
+L'état d'implémentation est suivi dans [compatibilite-fr.md](compatibilite-fr.md). Ce tableau indique la syntaxe reconnue par la ROM 2.01, comparée à la documentation.
 
 | Commande | Motif ROM | Effet | Défaut ROM | Sources, remarques |
 |---|---|---|---|---|

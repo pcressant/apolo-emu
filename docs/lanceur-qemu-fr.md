@@ -1,3 +1,5 @@
+[English](qemu-launcher.md) | Français
+
 # Lanceur QEMU
 
 ```bash
@@ -121,4 +123,4 @@ apolo-emu run --com 2 --language en --extension lenient-speed -- \
 ```
 
 Avec le second exemple, Screen Reader/2 doit être configuré sur COM2. Le correctif QEMU du projet `os2` reste
-nécessaire pour que COM.SYS détecte CTS et DSR (voir [transport-serie.md](transport-serie.md)).
+nécessaire pour que COM.SYS détecte CTS et DSR (voir [transport-serie-fr.md](transport-serie-fr.md)).

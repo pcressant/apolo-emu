@@ -26,7 +26,7 @@ class StaleSocketTests(unittest.TestCase):
     def test_stale_socket_removed(self):
         s = socket.socket(socket.AF_UNIX)
         s.bind(self.path)
-        s.close()  # le fichier reste, plus personne n'écoute
+        s.close()  # the file remains, but nobody is listening
         prepare_listen_path(self.path)
         self.assertFalse(os.path.exists(self.path))
 
@@ -84,18 +84,18 @@ class LinkTests(unittest.IsolatedAsyncioTestCase):
         writer.close()
 
     async def test_socket_permissions(self):
-        self.assertEqual(os.stat(self.path).st_mode & 0o077, 0)  # réservée au propriétaire
+        self.assertEqual(os.stat(self.path).st_mode & 0o077, 0)  # owner access only
 
     async def test_second_connection_refused_then_reconnect(self):
         r1, w1 = await asyncio.open_unix_connection(self.path)
         await until(self.link.connected.is_set)
         r2, w2 = await asyncio.open_unix_connection(self.path)
-        self.assertEqual(await asyncio.wait_for(r2.read(), 2), b"")  # fermée aussitôt
+        self.assertEqual(await asyncio.wait_for(r2.read(), 2), b"")  # closed immediately
         w2.close()
         self.assertEqual(await self.roundtrip(w1, r1, b"text @I+more\r\x18", 0), b"")
         w1.close()
         await until(lambda: not self.link.connected.is_set())
-        # L'appareil garde son état d'un branchement à l'autre (compteur d'index conservé).
+        # Device state persists across connections (index counter retained).
         r3, w3 = await asyncio.open_unix_connection(self.path)
         self.assertEqual(await self.roundtrip(w3, r3, b"@I?", 4), b"I10M")
         w3.close()
@@ -115,19 +115,19 @@ class ConnectModeTests(unittest.IsolatedAsyncioTestCase):
             path = os.path.join(d, "qemu.sock")
             sessions = asyncio.Queue()
 
-            async def qemu(reader, writer):  # QEMU avec server=on
+            async def qemu(reader, writer):  # QEMU with server=on
                 await sessions.put((reader, writer))
 
             device = ApolloDevice(NullBackend())
             link = SerialLink(device)
             task = asyncio.create_task(link.connect_forever(path, retry=0.05))
-            await asyncio.sleep(0.1)  # QEMU pas encore là : l'émulateur attend
+            await asyncio.sleep(0.1)  # QEMU not ready yet: emulator waits
             server = await asyncio.start_unix_server(qemu, path=path)
             reader, writer = await asyncio.wait_for(sessions.get(), 2)
             writer.write(b"@I?")
             self.assertEqual(await asyncio.wait_for(reader.readexactly(4), 2), b"I00M")
             writer.close()
-            reader, writer = await asyncio.wait_for(sessions.get(), 2)  # reconnexion
+            reader, writer = await asyncio.wait_for(sessions.get(), 2)  # reconnection
             writer.write(b"@W?")
             writer.write(b"\r")
             self.assertEqual(await asyncio.wait_for(reader.readexactly(3), 2), b"W30")

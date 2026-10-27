@@ -1,4 +1,4 @@
-"""Assemblage : appareil + backend vocal + transport série, à partir des options."""
+"""Assembly: device + speech backend + serial transport, configured from options."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class Options:
 
 
 class Emulator:
-    """Un Apollo II virtuel complet, prêt à être relié à une socket."""
+    """A complete virtual Apollo II, ready to connect to a socket."""
 
     def __init__(self, opts: Options) -> None:
         self.opts = opts
@@ -54,7 +54,7 @@ class Emulator:
         elif opts.backend == "null":
             self.backend = NullBackend()
         else:
-            raise ValueError(f"backend inconnu : {opts.backend}")
+            raise ValueError(f"unknown backend: {opts.backend}")
         self.device = ApolloDevice(self.backend, None, opts.device)
         self.link = SerialLink(self.device, Trace(opts.trace) if opts.trace else None)
         self._connect_task: asyncio.Task | None = None
@@ -83,7 +83,7 @@ async def run_standalone(opts: Options) -> int:
         loop.add_signal_handler(sig, stop.set)
     try:
         await stop.wait()
-        log.info("arrêt demandé")
+        log.info("shutdown requested")
     finally:
         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             loop.remove_signal_handler(sig)

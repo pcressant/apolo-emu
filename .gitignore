@@ -4,3 +4,8 @@ build/
 dist/
 .venv/
 result
+.claude/
+/src/
+/pkg/
+/*.pkg.tar.*
+/*.src.tar.*

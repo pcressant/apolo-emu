@@ -1,9 +1,10 @@
-"""Faux QEMU pour les tests du lanceur.
+"""Fake QEMU for launcher tests.
 
-Se connecte à la socket de « -chardev socket,…,path=… », envoie FAKE_QEMU_SEND (hex),
-écrit les octets reçus dans FAKE_QEMU_OUT, puis :
-- FAKE_QEMU_MODE=exit : se termine avec le code FAKE_QEMU_RC après FAKE_QEMU_WAIT secondes ;
-- FAKE_QEMU_MODE=wait : attend un signal ; SIGTERM ou SIGINT -> écrit « signal N » et sort (code 0).
+Connect to the -chardev socket,…,path=… socket, send FAKE_QEMU_SEND (hex),
+write received bytes to FAKE_QEMU_OUT, then:
+- FAKE_QEMU_MODE=exit: return FAKE_QEMU_RC after FAKE_QEMU_WAIT seconds;
+- FAKE_QEMU_MODE=wait: wait for a signal; SIGTERM/SIGINT writes "signal N"
+  and exits with code 0.
 """
 
 import os

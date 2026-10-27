@@ -1,4 +1,4 @@
-# Paquet Apolo-emu, utilisé par flake.nix et default.nix.
+# Apolo-emu package, used by flake.nix and default.nix.
 {
   lib,
   python3Packages,
@@ -12,7 +12,7 @@ python3Packages.buildPythonApplication {
   src = lib.cleanSource ./.;
   build-system = [ python3Packages.setuptools ];
 
-  # La suite complète tourne au build, y compris l'intégration avec un vrai QEMU.
+  # The full suite runs during the build, including real QEMU integration.
   nativeCheckInputs = [ qemu ];
   checkPhase = ''
     runHook preCheck
@@ -22,7 +22,8 @@ python3Packages.buildPythonApplication {
   pythonImportsCheck = [ "apolo_emu" ];
 
   meta = {
-    description = "Émulateur du synthétiseur vocal Dolphin Apollo II pour QEMU";
+    description = "Dolphin Apollo II speech synthesizer emulator for QEMU";
+    license = lib.licenses.mit;
     mainProgram = "apolo-emu";
     platforms = lib.platforms.linux;
   };

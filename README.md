@@ -1,62 +1,85 @@
+English | [Français](README-fr.md)
+
 # Apolo-emu
 
-Apolo-emu émule un synthétiseur vocal **Dolphin Apollo II** relié à un port série. Il est conçu pour faire parler
-les lecteurs d'écran DOS, Windows et OS/2 des années 1990 qui tournent dans QEMU : Sonolect, Épaulard,
-IBM Screen Reader/2, etc. La voix vient d'un moteur moderne, eSpeak NG via Speech Dispatcher.
+Apolo-emu emulates a **Dolphin Apollo II** hardware speech synthesizer connected to a serial port.
+It lets DOS, Windows and OS/2 screen readers from the 1990s speak inside QEMU: Sonolect, Épaulard,
+IBM Screen Reader/2 and others. Speech comes from eSpeak NG through Speech Dispatcher.
 
-L'objectif est la **fidélité au protocole** de l'appareil, et non la reproduction de son timbre. Cela couvre :
-- les commandes `@` et leurs plages ;
-- le découpage en propositions ;
-- le moment où chaque commande agit ;
-- les échos `@E` et l'index `@I+` / `@I?`, synchronisés avec la parole réelle ;
-- les interrogations `@c?` et `@L` ;
-- le mute (Ctrl-X).
+The goal is **protocol fidelity**, rather than reproducing the original voice. This includes:
 
-Ce qui n'est pas connu, approximé ou impossible est dit explicitement dans la documentation.
+- `@` commands and their parameter ranges;
+- splitting text into clauses;
+- the timing of each command;
+- `@E` echoes and `@I+` / `@I?` indexes synchronized with actual speech;
+- `@c?` and `@L` queries;
+- muting (Ctrl-X).
+
+Unknown behavior, approximations and unsupported features are explicitly documented.
+
+This is an independent project, with no affiliation to Dolphin or IBM. The project's own code and
+documentation are available under the [MIT license](LICENSE); see the [provenance notice](NOTICE.md).
+No ROM or proprietary guest software is included.
 
 ```text
-VM DOS / Windows / OS/2 → pilote Apollo II → COM1 → UART QEMU → socket Unix
-  → Apolo-emu (transport → appareil Apollo II → backend vocal) → Speech Dispatcher → eSpeak NG
+DOS / Windows / OS/2 VM → Apollo II driver → COM1 → QEMU UART → Unix socket
+  → Apolo-emu (transport → Apollo II device → speech backend) → Speech Dispatcher → eSpeak NG
 ```
 
 ## Installation
 
-Il faut Linux, Python 3.10 ou plus récent, et aucune autre dépendance Python. Pour la parole, il faut
-Speech Dispatcher et eSpeak NG ; pour le lanceur, QEMU.
+Linux and Python 3.10 or later are required. There are no additional Python runtime dependencies.
+Speech output requires Speech Dispatcher and eSpeak NG; the launcher requires QEMU.
 
 ```bash
-# Sans installation, depuis le dépôt
+# Run from the repository without installing
 python3 -m apolo_emu --help
 
-# Installation pour l'utilisateur (crée la commande apolo-emu)
+# Install for the current user (creates the apolo-emu command)
 pip install --user .
 ```
 
-Debian ou Ubuntu : `apt install speech-dispatcher espeak-ng qemu-system-x86`.
+Debian or Ubuntu: `apt install speech-dispatcher espeak-ng qemu-system-x86`.
 
-NixOS : ces paquets suffisent, avec `python3`.
+NixOS: these packages and `python3` are sufficient. Apolo-emu runs without root privileges.
 
-Apolo-emu fonctionne sans privilèges root.
+### Arch Linux
 
-## Utilisation
+From the complete project directory:
 
-### Mode lanceur : Apolo-emu et QEMU ensemble
+```bash
+sudo pacman -S --needed base-devel
+makepkg -si
+# For speech output (optional package dependencies):
+sudo pacman -S --needed speech-dispatcher espeak-ng
+```
+
+The [PKGBUILD](PKGBUILD) builds the current local checkout, including uncommitted changes;
+it does not download sources and cannot be used on its own or as an AUR submission.
+`makepkg -s` installs build/check dependencies, including `qemu-system-x86` for the independent
+test VM. Tests produce no speech and do not use your existing VMs. QEMU is optional at runtime
+when connecting to an already configured serial socket. Both documentation languages are
+installed under `/usr/share/doc/apolo-emu/`.
+
+## Usage
+
+### Launcher mode: Apolo-emu and QEMU together
 
 ```bash
 apolo-emu run --language fr -- qemu-system-i386 -m 64 -hda dos.img
 ```
 
-Le lanceur :
-1. crée une socket propre à l'instance ;
-2. démarre l'émulateur ;
-3. ajoute COM1 à la commande QEMU ;
-4. lance QEMU, puis nettoie tout à la sortie.
+The launcher:
 
-Les autres options de QEMU sont conservées telles quelles. Le port est choisi avec `--com 2`. Le lanceur refuse
-de démarrer si le port est déjà défini dans la commande. Tous les détails sont dans
-[docs/lanceur-qemu.md](docs/lanceur-qemu.md).
+1. Creates a socket for the instance.
+2. Starts the emulator.
+3. Adds COM1 to the QEMU command.
+4. Starts QEMU and cleans up when it exits.
 
-### Mode autonome : l'émulateur seul
+Other QEMU options are preserved. Select another port with `--com 2`. The launcher refuses to start
+if the selected port is already defined. See [docs/qemu-launcher.md](docs/qemu-launcher.md).
+
+### Standalone mode: the emulator alone
 
 ```bash
 apolo-emu --listen /run/user/$UID/apollo.sock
@@ -64,59 +87,68 @@ qemu-system-i386 … -chardev socket,id=apollo,path=/run/user/$UID/apollo.sock,r
                    -serial chardev:apollo
 ```
 
-Si QEMU est déjà configuré en serveur (`server=on`), on utilise la connexion inverse :
+If QEMU is already configured as a server (`server=on`), connect in the opposite direction:
 
 ```bash
-apolo-emu --connect /chemin/vers/com1.sock
+apolo-emu --connect /path/to/com1.sock
 ```
 
-### Réglages selon le logiciel invité
+### Settings for each guest application
 
-| Invité | Options suggérées |
+| Guest | Suggested options |
 |---|---|
-| Sonolect 7.11 (DOS) | `--language fr --codepage cp850 --extension burst-interrupt` (interruption de la parole à la frappe) |
-| Épaulard (Windows 3.11) | `--language fr --codepage cp850` ; la même ligne que Sonolect convient (voir `../pc486/scripts/pc486`) |
-| IBM Screen Reader/2 (OS/2) | `--language en --extension lenient-speed` (le profil IBM envoie `@wb` et `@wf`) ; voir `../os2/scripts/gateway` |
-| Speakup (Linux) | aucune |
+| Sonolect 7.11 (DOS) | `--language fr --codepage cp850 --extension burst-interrupt` (interrupt speech when typing) |
+| Épaulard (Windows 3.11) | `--language fr --codepage cp850` with a version using the authentic `@E` echo; see below |
+| IBM Screen Reader/2 (OS/2) | `--language en --extension lenient-speed` (the IBM profile sends `@wb` and `@wf`); see [launcher integration](docs/qemu-launcher.md) |
+| Speakup (Linux) | none |
 
-Les extensions sont désactivées par défaut. Elles sont décrites dans [docs/extensions.md](docs/extensions.md) et
-listées par `apolo-emu --list-extensions`.
+Extensions are disabled by default. They are described in [docs/extensions.md](docs/extensions.md)
+and listed by `apolo-emu --list-extensions`.
 
-### Options utiles
+The Épaulard trial described in the development report used a version modified to send
+`text<CR>@E<c><CR>`. Versions using the old `@I<c>` need the `epaulard-index` extension;
+read [its description](docs/extensions.md) before enabling it.
 
-| Option | Rôle |
+### Useful options
+
+| Option | Purpose |
 |---|---|
-| `--backend simulated` | sans son : la durée de parole est simulée, ce qui permet d'essayer sans Speech Dispatcher |
-| `--backend null` | sans son : chaque énoncé est déclaré fini aussitôt |
-| `--module espeak-ng`, `--voice NOM` | choix du module et de la voix de Speech Dispatcher |
-| `--rate-offset`, `--pitch-offset`, `--volume-offset`, `--no-volume` | ajustement de la correspondance des réglages |
-| `--trace FICHIER` | journal horodaté de chaque octet reçu (RX) et émis (TX) |
-| `--log-level debug` | détail de l'analyse et des événements vocaux |
+| `--backend simulated` | Silent output with simulated speech duration, for trials without Speech Dispatcher |
+| `--backend null` | Silent output; each utterance finishes immediately |
+| `--module espeak-ng`, `--voice NAME` | Select the Speech Dispatcher output module and voice |
+| `--rate-offset`, `--pitch-offset`, `--volume-offset`, `--no-volume` | Adjust parameter mapping |
+| `--trace FILE` | Timestamped log of every received (RX) and transmitted (TX) byte |
+| `--log-level debug` | Detailed parsing and speech events |
 
 ## Documentation
 
-| Document | Contenu |
+Each document links to its French version.
+
+| Document | Contents |
 |---|---|
-| [docs/protocole.md](docs/protocole.md) | protocole Apollo II, avec la source et le degré de certitude de chaque point |
-| [docs/compatibilite.md](docs/compatibilite.md) | matrice de compatibilité des commandes |
-| [docs/architecture.md](docs/architecture.md) | modules, interfaces, modèle de synchronisation |
-| [docs/transport-serie.md](docs/transport-serie.md) | ce qui relève de QEMU, de la socket et de l'Apollo ; contrôle de flux |
-| [docs/backend-vocal.md](docs/backend-vocal.md) | traduction des réglages, marques SSML, Speech Dispatcher |
-| [docs/lanceur-qemu.md](docs/lanceur-qemu.md) | lanceur, et intégration à des commandes QEMU existantes |
-| [docs/extensions.md](docs/extensions.md) | extensions non authentiques, désactivées par défaut |
-| [docs/limitations.md](docs/limitations.md) | limitations connues |
-| [docs/references.md](docs/references.md) | sources consultées |
-| [docs/bilan.md](docs/bilan.md) | compte rendu du développement |
+| [docs/protocol.md](docs/protocol.md) | Apollo II protocol, with sources and confidence levels |
+| [docs/compatibility.md](docs/compatibility.md) | Command compatibility matrix |
+| [docs/architecture.md](docs/architecture.md) | Modules, interfaces and synchronization model |
+| [docs/serial-transport.md](docs/serial-transport.md) | QEMU, socket and Apollo responsibilities; flow control |
+| [docs/speech-backend.md](docs/speech-backend.md) | Parameter mapping, SSML marks and Speech Dispatcher |
+| [docs/qemu-launcher.md](docs/qemu-launcher.md) | Launcher and integration with existing QEMU commands |
+| [docs/extensions.md](docs/extensions.md) | Non-authentic extensions, disabled by default |
+| [docs/limitations.md](docs/limitations.md) | Known limitations |
+| [docs/references.md](docs/references.md) | Sources consulted |
+| [docs/publication.md](docs/publication.md) | Provenance and history checks before publication |
+| [docs/development-report.md](docs/development-report.md) | Development report |
+| [docs/requirements.md](docs/requirements.md) | Original project requirements |
 
 ## Tests
 
 ```bash
-python3 -m unittest discover -s tests -t .                       # suite complète (QEMU inclus s'il est présent)
-APOLO_EMU_SKIP_QEMU=1 python3 -m unittest discover -s tests -t .  # sans QEMU
-APOLO_EMU_SPEECHD=1 python3 -m unittest tests.test_speechd_integration   # parole réelle, volume très bas
+python3 -m unittest discover -s tests -t .                       # full suite, including QEMU if available
+APOLO_EMU_SKIP_QEMU=1 python3 -m unittest discover -s tests -t .  # without QEMU
+APOLO_EMU_SPEECHD=1 python3 -m unittest tests.test_speechd_integration   # actual speech, very low volume
 ```
 
-La suite n'a besoin ni d'OS/2 ni de Windows :
-- un faux backend vocal pilote la progression de la parole ;
-- un faux QEMU teste le lanceur ;
-- un secteur d'amorçage de 512 octets, assemblé par les tests, sert de VM de test sous un vrai QEMU.
+The suite requires neither OS/2 nor Windows:
+
+- A fake speech backend controls speech progress.
+- A fake QEMU tests the launcher.
+- A 512-byte boot sector, assembled by the tests, provides a test VM under real QEMU.

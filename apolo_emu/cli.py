@@ -1,7 +1,7 @@
-"""Ligne de commande.
+"""Command-line interface.
 
-  apolo-emu [options] [--listen CHEMIN | --connect CHEMIN]   émulateur seul
-  apolo-emu run [options] -- qemu-system-i386 …              émulateur + QEMU
+  apolo-emu [options] [--listen PATH | --connect PATH]   standalone emulator
+  apolo-emu run [options] -- qemu-system-i386 …          emulator + QEMU
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from .mapping import Mapping
 
 
 def _languages(value: str) -> dict[int, str]:
-    """« fr » ou « 1=en,2=fr »."""
+    """"fr" or "1=en,2=fr"."""
     out: dict[int, str] = {}
     for n, item in enumerate(value.split(","), start=1):
         slot, eq, lang = item.partition("=")
@@ -27,42 +27,42 @@ def _languages(value: str) -> dict[int, str]:
         else:
             out[n] = slot.strip()
     if not out or any(not 1 <= k <= 7 for k in out):
-        raise argparse.ArgumentTypeError("emplacements 1 à 7, par exemple « 1=en,2=fr »")
+        raise argparse.ArgumentTypeError("banks 1 through 7, for example 1=en,2=fr")
     return out
 
 
 def _common(p: argparse.ArgumentParser) -> None:
-    g = p.add_argument_group("appareil")
-    g.add_argument("--languages", "--language", type=_languages, default={1: "en"}, metavar="LISTE",
-                   help="langue de chaque emplacement de ROM (@=n) : « fr » ou « 1=en,2=fr » (défaut : en)")
-    g.add_argument("--codepage", default="cp437", help="page de codes du texte reçu (défaut : cp437)")
-    g.add_argument("--extension", action="append", default=[], choices=sorted(EXTENSIONS), metavar="NOM",
-                   help="active une extension non authentique (répétable ; voir --list-extensions)")
+    g = p.add_argument_group("device")
+    g.add_argument("--languages", "--language", type=_languages, default={1: "en"}, metavar="LIST",
+                   help="language of each ROM bank (@=n): fr or 1=en,2=fr (default: en)")
+    g.add_argument("--codepage", default="cp437", help="code page of received text (default: cp437)")
+    g.add_argument("--extension", action="append", default=[], choices=sorted(EXTENSIONS), metavar="NAME",
+                   help="enable a non-authentic extension (repeatable; see --list-extensions)")
     g.add_argument("--talking-rule", choices=("doc", "rom"), default="doc",
-                   help="sens de T/M dans la réponse à @I? (défaut : doc)")
-    g.add_argument("--version-text", default=DeviceConfig.version_text, help="texte dit par @?")
+                   help="meaning of T/M in the @I? reply (default: doc)")
+    g.add_argument("--version-text", default=DeviceConfig.version_text, help="text spoken by @?")
 
-    g = p.add_argument_group("parole")
+    g = p.add_argument_group("speech")
     g.add_argument("--backend", choices=("ssip", "simulated", "null"), default="ssip",
-                   help="ssip : Speech Dispatcher ; simulated : sans son, durée simulée ; null : sans son, immédiat")
-    g.add_argument("--speechd-address", help="adresse SSIP (défaut : $SPEECHD_ADDRESS ou la socket de session)")
-    g.add_argument("--module", help="module de sortie Speech Dispatcher (par exemple espeak-ng)")
-    g.add_argument("--voice", dest="synthesis_voice", help="voix du moteur (SYNTHESIS_VOICE) ; remplace @V")
+                   help="ssip: Speech Dispatcher; simulated: silent, simulated duration; null: silent, immediate")
+    g.add_argument("--speechd-address", help="SSIP address (default: $SPEECHD_ADDRESS or session socket)")
+    g.add_argument("--module", help="Speech Dispatcher output module (e.g. espeak-ng)")
+    g.add_argument("--voice", dest="synthesis_voice", help="engine voice (SYNTHESIS_VOICE); overrides @V")
     g.add_argument("--priority", default="message",
                    choices=("important", "message", "text", "notification", "progress"),
-                   help="priorité SSIP (défaut : message, les énoncés se suivent sans s'annuler)")
+                   help="SSIP priority (default: message, sequential utterances without cancellation)")
     g.add_argument("--no-autospawn", dest="autospawn", action="store_false",
-                   help="ne pas démarrer Speech Dispatcher s'il est absent")
-    g.add_argument("--rate-offset", type=int, default=0, help="décalage ajouté au débit SSIP")
-    g.add_argument("--pitch-offset", type=int, default=0, help="décalage ajouté à la hauteur SSIP")
-    g.add_argument("--volume-offset", type=int, default=0, help="décalage ajouté au volume SSIP")
-    g.add_argument("--no-volume", dest="use_volume", action="store_false", help="ignorer @A")
-    g.add_argument("--cps", type=float, default=15.0, help="caractères par seconde du backend simulé")
+                   help="do not start Speech Dispatcher if absent")
+    g.add_argument("--rate-offset", type=int, default=0, help="offset added to SSIP rate")
+    g.add_argument("--pitch-offset", type=int, default=0, help="offset added to SSIP pitch")
+    g.add_argument("--volume-offset", type=int, default=0, help="offset added to SSIP volume")
+    g.add_argument("--no-volume", dest="use_volume", action="store_false", help="ignore @A")
+    g.add_argument("--cps", type=float, default=15.0, help="characters per second for the simulated backend")
 
-    g = p.add_argument_group("journal")
+    g = p.add_argument_group("logging")
     g.add_argument("--log-level", default="info", choices=("debug", "info", "warning", "error"))
-    g.add_argument("--trace", type=argparse.FileType("a", encoding="utf-8"), metavar="FICHIER",
-                   help="journal horodaté des octets reçus (RX) et émis (TX)")
+    g.add_argument("--trace", type=argparse.FileType("a", encoding="utf-8"), metavar="FILE",
+                   help="timestamped log of received (RX) and transmitted (TX) bytes")
 
 
 def _options(ns: argparse.Namespace) -> Options:
@@ -100,18 +100,18 @@ def _check_codepage(name: str) -> None:
     try:
         codecs.lookup(name)
     except LookupError:
-        raise SystemExit(f"apolo-emu: page de codes inconnue : {name}")
+        raise SystemExit(f"apolo-emu: unknown code page: {name}")
 
 
 def main_standalone(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="apolo-emu", description="Émulateur du synthétiseur vocal Apollo II.",
-                                epilog="Mode lanceur : apolo-emu run --help")
+    p = argparse.ArgumentParser(prog="apolo-emu", description="Apollo II speech synthesizer emulator.",
+                                epilog="Launcher mode: apolo-emu run --help")
     where = p.add_mutually_exclusive_group()
-    where.add_argument("--listen", "--socket", dest="listen", metavar="CHEMIN",
-                       help="écoute sur une socket Unix (QEMU : -chardev socket,path=CHEMIN)")
-    where.add_argument("--connect", metavar="CHEMIN",
-                       help="se connecte à la socket d'un chardev QEMU serveur (server=on) et s'y reconnecte")
-    p.add_argument("--list-extensions", action="store_true", help="liste les extensions et quitte")
+    where.add_argument("--listen", "--socket", dest="listen", metavar="PATH",
+                       help="listen on a Unix socket (QEMU: -chardev socket,path=PATH)")
+    where.add_argument("--connect", metavar="PATH",
+                       help="connect and reconnect to a QEMU server chardev socket (server=on)")
+    p.add_argument("--list-extensions", action="store_true", help="list extensions and exit")
     p.add_argument("--version", action="version", version=f"apolo-emu {__version__}")
     _common(p)
     ns = p.parse_args(argv)
@@ -120,7 +120,7 @@ def main_standalone(argv: list[str]) -> int:
             print(f"{name:16} {doc}")
         return 0
     if not ns.listen and not ns.connect:
-        p.error("indiquer --listen CHEMIN ou --connect CHEMIN (ou utiliser « apolo-emu run »)")
+        p.error("specify --listen PATH or --connect PATH (or use apolo-emu run)")
     _check_codepage(ns.codepage)
     _setup_logging(ns.log_level)
     return asyncio.run(run_standalone(_options(ns)))
@@ -135,17 +135,17 @@ def main_run(argv: list[str]) -> int:
     else:
         own, qemu = argv, []
     p = argparse.ArgumentParser(prog="apolo-emu run",
-                                description="Démarre Apolo-emu puis QEMU, relié à un port COM de l'invité.",
-                                usage="apolo-emu run [options] -- qemu-system-i386 [options QEMU]")
-    p.add_argument("--com", type=int, default=1, choices=(1, 2, 3, 4), help="port COM de l'invité (défaut : 1)")
-    p.add_argument("--socket-dir", metavar="DOSSIER",
-                   help="dossier des répertoires d'instance (défaut : $XDG_RUNTIME_DIR)")
+                                description="Start Apolo-emu and QEMU, connected to a guest COM port.",
+                                usage="apolo-emu run [options] -- qemu-system-i386 [QEMU options]")
+    p.add_argument("--com", type=int, default=1, choices=(1, 2, 3, 4), help="guest COM port (default: 1)")
+    p.add_argument("--socket-dir", metavar="DIR",
+                   help="parent directory for instances (default: $XDG_RUNTIME_DIR)")
     p.add_argument("--on-signal", choices=("forward", "wait"), default="forward",
-                   help="forward : transmettre SIGINT/SIGTERM/SIGHUP à QEMU ; wait : attendre que QEMU s'arrête")
+                   help="forward: send SIGINT/SIGTERM/SIGHUP to QEMU; wait: wait for QEMU to exit")
     _common(p)
     ns = p.parse_args(own)
     if not qemu:
-        p.error("commande QEMU absente après « -- »")
+        p.error("missing QEMU command after --")
     _check_codepage(ns.codepage)
     _setup_logging(ns.log_level)
     return asyncio.run(run_launcher(qemu, _options(ns), ns.com, ns.socket_dir, ns.on_signal))

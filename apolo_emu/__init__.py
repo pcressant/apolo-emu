@@ -1,3 +1,3 @@
-"""Apolo-emu : émulateur du synthétiseur vocal Dolphin Apollo II."""
+"""Apolo-emu: Dolphin Apollo II speech synthesizer emulator."""
 
 __version__ = "0.1.0"

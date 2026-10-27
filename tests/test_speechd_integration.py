@@ -1,7 +1,7 @@
-"""Intégration avec le vrai Speech Dispatcher et eSpeak NG.
+"""Integration with real Speech Dispatcher and eSpeak NG.
 
-Produit du son (volume très bas, priorité « notification » pour ne pas couper les autres
-clients) : à lancer explicitement avec APOLO_EMU_SPEECHD=1.
+Produces sound at very low volume with notification priority to avoid interrupting
+other clients. Run explicitly with APOLO_EMU_SPEECHD=1.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ from apolo_emu.ssip import SSIPBackend
 from .test_ssip import until
 
 
-@unittest.skipUnless(os.environ.get("APOLO_EMU_SPEECHD"), "APOLO_EMU_SPEECHD=1 pour activer")
+@unittest.skipUnless(os.environ.get("APOLO_EMU_SPEECHD"), "set APOLO_EMU_SPEECHD=1 to enable")
 class SpeechdTests(unittest.IsolatedAsyncioTestCase):
     async def test_echo_and_index_follow_real_speech(self):
         backend = SSIPBackend(priority="notification", mapping=Mapping(volume_offset=-90),
@@ -30,10 +30,10 @@ class SpeechdTests(unittest.IsolatedAsyncioTestCase):
             dev.feed(b"@E1un deux trois quatre, @I+cinq six sept huit.\r@E2\r")
             dev.feed(b"@I?")
             await until(lambda: any(b == b"2" for _, b in replies), timeout=15)
-            # @I? répond tout de suite ; « 1 » attend que la parole atteigne la proposition.
+            # @I? replies immediately; 1 waits for speech to reach the clause.
             self.assertEqual([b for _, b in replies], [b"I10T", b"1", b"2"])
             t1, t2 = replies[1][0], replies[2][0]
-            self.assertGreater(t2 - t1, 0.5, "l'écho final doit suivre la parole réelle")
+            self.assertGreater(t2 - t1, 0.5, "the final echo must follow actual speech")
             replies.clear()
             dev.feed(b"@I?")
             self.assertEqual(replies[0][1], b"I00M")

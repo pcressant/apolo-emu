@@ -1,3 +1,5 @@
+[English](requirements.md) | Français
+
 # Projet Apolo-emu : émulateur de synthétiseur vocal Apollo II
 
 ## Contexte

@@ -1,3 +1,5 @@
+[English](development-report.md) | Français
+
 # Bilan du développement (25 octobre 2026)
 
 ## Fonctionnalités implémentées
@@ -31,7 +33,7 @@
 
 ## Sources consultées
 
-Voir [references.md](references.md) :
+Voir [references-fr.md](references-fr.md) :
 - documentation Dolphin : APOLLO.TXT, Technical Bulletin 25, manuel Series 2 de 1998 ;
 - décompilation de la ROM 2.01 ;
 - Speakup ;
@@ -65,7 +67,7 @@ celui de la parole réelle, qui s'active avec `APOLO_EMU_SPEECHD=1`. Lancé sép
 
 ## Limites de fidélité
 
-Voir [limitations.md](limitations.md). Les principales :
+Voir [limitations-fr.md](limitations-fr.md). Les principales :
 - voix, prosodie et effets sonores ne sont pas ceux de l'appareil ;
 - aucun contrôle de flux matériel n'est possible au travers d'une socket ;
 - une seule ROM sert de référence pour le détail de l'analyse ;

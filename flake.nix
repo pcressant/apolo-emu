@@ -1,5 +1,5 @@
 {
-  description = "Apolo-emu : émulateur du synthétiseur vocal Dolphin Apollo II pour QEMU";
+  description = "Apolo-emu : Dolphin Apollo II speech synthesizer emulator for QEMU";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
@@ -22,7 +22,7 @@
         default = {
           type = "app";
           program = nixpkgs.lib.getExe self.packages.${pkgs.stdenv.hostPlatform.system}.default;
-          meta.description = "Émulateur du synthétiseur vocal Apollo II";
+          meta.description = "Apollo II speech synthesizer emulator";
         };
       });
 

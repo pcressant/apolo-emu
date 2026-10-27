@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "apolo-emu"
 version = "0.1.0"
-description = "Émulateur du synthétiseur vocal Dolphin Apollo II, relié à QEMU par une socket Unix"
+description = "Dolphin Apollo II speech synthesizer emulator, connected to QEMU through a Unix socket"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE.md", "NOTICE-fr.md"]
 requires-python = ">=3.10"
 dependencies = []
 

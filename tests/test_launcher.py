@@ -36,7 +36,7 @@ class ArgsTests(unittest.TestCase):
             build_qemu_args(["q"], "/s", 5, "a")
 
     def test_serial_none_consumes_an_index(self):
-        # Vérifié sur QEMU 10.2 : « -serial none -serial null » place null sur COM2.
+        # Verified on QEMU 10.2: -serial none -serial null places null on COM2.
         self.assertEqual(serial_usage(["-serial", "none", "-serial", "null"]).occupied, {1})
         build_qemu_args(["q", "-serial", "none", "-serial", "null"], "/s", 1, "a")
 
@@ -44,7 +44,7 @@ class ArgsTests(unittest.TestCase):
         self.assertEqual(serial_usage(["--serial", "stdio", "-serial=null"]).occupied, {0, 1})
         u = serial_usage(["-device", "driver=isa-serial,index=3", "-device", "isa-serial", "-nographic"])
         self.assertEqual((u.occupied, u.auto), ({3}, 1))
-        self.assertFalse(serial_usage(["-nographic", "-hda", "-serial"]).occupied)  # « -serial » comme valeur
+        self.assertFalse(serial_usage(["-nographic", "-hda", "-serial"]).occupied)  # -serial as a value
 
     def test_nographic_warning(self):
         self.assertTrue(serial_usage(["-nographic"]).warnings)
@@ -104,7 +104,7 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(rc, 3)
         with open(out, "rb") as f:
             self.assertEqual(f.read(), b"I00M")
-        self.assertEqual(os.listdir(self.base), [])  # socket et répertoire supprimés
+        self.assertEqual(os.listdir(self.base), [])  # socket and directory removed
 
     async def test_missing_qemu(self):
         rc = await run_launcher(["/nonexistent/qemu-system-i386"], Options(backend="null"), base_dir=self.base)
@@ -125,13 +125,13 @@ class RunTests(unittest.IsolatedAsyncioTestCase):
             d = os.path.join(self.tmp.name, f"i{i}")
             os.mkdir(d)
             outs.append(os.path.join(d, "out.bin"))
-        # Chaque faux QEMU écrit dans son propre fichier : l'environnement est figé au lancement.
+        # Each fake QEMU writes its own file: environment captured at launch.
         for out in outs:
             os.environ.update(FAKE_QEMU_OUT=out, FAKE_QEMU_SEND=b"@Ex\r".hex(), FAKE_QEMU_WAIT="0.6",
                               FAKE_QEMU_RC="0")
             tasks.append(asyncio.create_task(run_launcher(FAKE_QEMU, Options(backend="null"), base_dir=self.base)))
             await asyncio.sleep(0.15)
-        self.assertEqual(len(os.listdir(self.base)), 3)  # trois instances simultanées
+        self.assertEqual(len(os.listdir(self.base)), 3)  # three concurrent instances
         self.assertEqual(await asyncio.gather(*tasks), [0, 0, 0])
         for out in outs:
             with open(out, "rb") as f:
@@ -160,7 +160,7 @@ class SignalTests(unittest.TestCase):
                 time.sleep(0.2)
                 return
             time.sleep(0.05)
-        self.fail("faux QEMU non démarré")
+        self.fail("fake QEMU did not start")
 
     def test_sigterm_forwarded_and_cleanup(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -181,11 +181,11 @@ class SignalTests(unittest.TestCase):
             os.mkdir(base)
             p = self.run_cli(tmp, base, ("--on-signal", "wait"))
             self.wait_started(tmp)
-            p.send_signal(signal.SIGTERM)  # au lanceur seul
+            p.send_signal(signal.SIGTERM)  # to the launcher only
             time.sleep(0.5)
             self.assertIsNone(p.poll())
             self.assertFalse(os.path.exists(os.path.join(tmp, "out.bin.signal")))
-            os.killpg(p.pid, signal.SIGINT)  # comme un Ctrl-C au terminal : QEMU le reçoit lui-même
+            os.killpg(p.pid, signal.SIGINT)  # like terminal Ctrl-C: QEMU receives it directly
             _, err = p.communicate(timeout=10)
             self.assertEqual(p.returncode, 0, err.decode())
             self.assertEqual(os.listdir(base), [])

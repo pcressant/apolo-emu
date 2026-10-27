@@ -1,7 +1,9 @@
+[English](compatibility.md) | Français
+
 # Matrice de compatibilité
 
 Aucun véritable Apollo II n'a pu être utilisé. « Vérifiée » signifie donc :
-- au moins deux sources indépendantes concordent sur le comportement ([protocole.md](protocole.md)) ;
+- au moins deux sources indépendantes concordent sur le comportement ([protocole-fr.md](protocole-fr.md)) ;
 - l'implémentation est couverte par un test automatique.
 
 **États** :
@@ -31,7 +33,7 @@ Aucun véritable Apollo II n'a pu être utilisé. « Vérifiée » signifie donc
 | `. , : ; ! ?` : fin de proposition | VÉRIFIÉE | DOC (TB25), ROM | |
 | Limites de 220 et 250 octets, report du `@` | NON VÉRIFIÉE | ROM | |
 | Texte sans CR ni ponctuation | VÉRIFIÉE | DOC, ROM | reste en attente, comme sur l'appareil ; les prototypes le disaient après 0,3 s |
-| Lecture séquentielle, effets au début de chaque proposition | NON VÉRIFIÉE | DOC (TB25 §6.2), ROM | déduction ; voir protocole.md §2.3 |
+| Lecture séquentielle, effets au début de chaque proposition | NON VÉRIFIÉE | DOC (TB25 §6.2), ROM | déduction ; voir protocole-fr.md §2.3 |
 | Codes de contrôle traités comme des espaces | NON VÉRIFIÉE | ROM | |
 | Page de codes | PARTIELLE | ROM, PIL | CP437 par défaut, réglable ; la table de la ROM n'est reprise que pour l'ASCII |
 | RTS/CTS à l'alternat, chute de CTS après chaque octet | NON IMPLÉMENTÉE | DOC | impossible au travers d'une socket ; l'UART de QEMU voit CTS actif (MSR = 0xB0, mesuré) |

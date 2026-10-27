@@ -1,12 +1,12 @@
-"""Backend Speech Dispatcher : client SSIP asynchrone, sans dépendance externe.
+"""Speech Dispatcher backend: asynchronous SSIP client without external dependencies.
 
-Chaque énoncé devient un message SSML ; les marques <mark/> reviennent sous forme
-d'événements 700 (INDEX MARK), en même temps que la parole. Les réglages Apollo sont
-traduits par mapping.Mapping et envoyés seulement quand ils changent.
+Each utterance becomes an SSML message. Marks return as 700 (INDEX MARK)
+events when speech reaches them. Apollo settings are mapped by mapping.Mapping
+and sent only when changed.
 
-Si Speech Dispatcher devient injoignable, les énoncés en cours sont déclarés
-terminés : l'invité reçoit ses échos et n'attend pas indéfiniment. Ce choix est
-journalisé et documenté (docs/limitations.md).
+If Speech Dispatcher becomes unreachable, current utterances are declared
+finished so the guest receives echoes instead of waiting indefinitely.
+This policy is logged and documented in docs/limitations.md.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ def to_ssml(utt: Utterance) -> str:
 
 
 def escape_data(text: str) -> str:
-    """Corps d'un SPEAK : une ligne réduite à « . » termine le message, on double le point."""
+    """SPEAK body: a lone dot ends the message, so double leading dots."""
     lines = text.replace("\r", " ").split("\n")
     return "\r\n".join("." + line if line.startswith(".") else line for line in lines)
 
@@ -59,7 +59,7 @@ class SSIPError(Exception):
 @dataclass
 class _Pending:
     future: asyncio.Future
-    uid: int | None = None  # SPEAK en attente de son identifiant
+    uid: int | None = None  # SPEAK awaiting its identifier
     lines: list[str] = field(default_factory=list)
 
 
@@ -93,8 +93,8 @@ class SSIPBackend:
         self._writer: asyncio.StreamWriter | None = None
         self._pending: deque[_Pending] = deque()
         self._msg_to_uid: dict[str, int] = {}
-        self._queued: set[int] = set()  # énoncés en file, pas encore transmis
-        self._sent: set[int] = set()  # énoncés transmis, pas encore terminés
+        self._queued: set[int] = set()  # queued utterances, not yet submitted
+        self._sent: set[int] = set()  # submitted utterances, not yet finished
         self._applied: dict[str, str] = {}
         self._spawned = False
         self._closing = False
@@ -110,7 +110,7 @@ class SSIPBackend:
         self._queue().put_nowait(("speak", utt))
 
     def cancel(self) -> None:
-        # Les SPEAK pas encore transmis sont abandonnés ; CANCEL arrête le reste.
+        # Discard unsent SPEAK requests; CANCEL stops the rest.
         q = self._queue()
         kept = []
         while not q.empty():
@@ -129,7 +129,7 @@ class SSIPBackend:
         try:
             await self._ensure_connected()
         except (OSError, SSIPError) as e:
-            log.warning("Speech Dispatcher injoignable (%s) : nouvel essai au prochain énoncé", e)
+            log.warning("Speech Dispatcher unreachable (%s): retry on next utterance", e)
 
     async def close(self) -> None:
         self._closing = True
@@ -143,7 +143,7 @@ class SSIPBackend:
                 pass
         await self._disconnect("fermeture")
 
-    # --------------------------------------------------------- connexion
+    # -------------------------------------------------------- connection
 
     def _queue(self) -> asyncio.Queue:
         if self._ops is None:
@@ -157,7 +157,7 @@ class SSIPBackend:
         if kind == "inet_socket":
             host, _, port = rest.rpartition(":")
             return await asyncio.open_connection(host or "127.0.0.1", int(port or 6560))
-        raise SSIPError(f"adresse Speech Dispatcher non reconnue : {self.address}")
+        raise SSIPError(f"unrecognized Speech Dispatcher address: {self.address}")
 
     async def _ensure_connected(self) -> None:
         if self._writer is not None:
@@ -168,7 +168,7 @@ class SSIPBackend:
             if not (self.autospawn and not self._spawned and shutil.which("speech-dispatcher")):
                 raise
             self._spawned = True
-            log.info("démarrage de Speech Dispatcher (speech-dispatcher --spawn)")
+            log.info("starting Speech Dispatcher (speech-dispatcher --spawn)")
             proc = await asyncio.create_subprocess_exec(
                 "speech-dispatcher", "--spawn",
                 stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
@@ -192,7 +192,7 @@ class SSIPBackend:
         await self._command("SET self SSML_MODE on")
         await self._command("SET self NOTIFICATION all on")
         self.connected.set()
-        log.info("connecté à Speech Dispatcher (%s)", self.address)
+        log.info("connected to Speech Dispatcher (%s)", self.address)
 
     async def _disconnect(self, reason: str) -> None:
         writer, self._writer, self._reader = self._writer, None, None
@@ -216,15 +216,15 @@ class SSIPBackend:
     def _release_outstanding(self, reason: str) -> None:
         uids, self._sent = sorted(self._sent), set()
         if uids and not self._closing:
-            log.warning("Speech Dispatcher (%s) : %d énoncé(s) déclaré(s) terminé(s)", reason, len(uids))
+            log.warning("Speech Dispatcher (%s): %d utterance(s) declared finished", reason, len(uids))
         for uid in uids:
             self._emit(SpeechEvent(uid, "end"))
 
-    # ------------------------------------------------------- protocole
+    # ---------------------------------------------------------- protocol
 
     async def _send(self, data: bytes, uid: int | None = None, timeout: float = 10.0) -> list[str]:
         if self._writer is None:
-            raise SSIPError("non connecté")
+            raise SSIPError("not connected")
         fut = asyncio.get_running_loop().create_future()
         self._pending.append(_Pending(fut, uid))
         self._writer.write(data)
@@ -259,20 +259,20 @@ class SSIPBackend:
                     if not p.future.done():
                         p.future.set_result(lines)
                 else:
-                    log.debug("réponse SSIP inattendue : %s", lines)
+                    log.debug("unexpected SSIP reply: %s", lines)
         except (ConnectionError, asyncio.IncompleteReadError) as e:
-            log.debug("lecture SSIP interrompue : %s", e)
+            log.debug("SSIP reading interrupted: %s", e)
         except asyncio.CancelledError:
             return
         if not self._closing:
-            await self._disconnect("connexion perdue")
+            await self._disconnect("connection lost")
 
     def _event(self, lines: list[str]) -> None:
         code = lines[-1][:3]
         msg_id = lines[0][4:] if len(lines) >= 2 else ""
         uid = self._msg_to_uid.get(msg_id)
         if uid is None:
-            log.debug("événement SSIP pour un message inconnu : %s", lines)
+            log.debug("SSIP event for unknown message: %s", lines)
             return
         if code == "701":
             self._emit(SpeechEvent(uid, "begin"))
@@ -287,10 +287,10 @@ class SSIPBackend:
         if self._sink is not None:
             try:
                 self._sink(ev)
-            except Exception:  # une erreur de l'appareil ne doit pas couper le backend
-                log.exception("erreur en traitant %s", ev)
+            except Exception:  # a device error must not stop the backend
+                log.exception("error processing %s", ev)
 
-    # ---------------------------------------------------------- travail
+    # ------------------------------------------------------------ worker
 
     async def _work(self) -> None:
         q = self._queue()
@@ -300,7 +300,7 @@ class SSIPBackend:
             try:
                 if op == "speak":
                     if uid not in self._queued:
-                        continue  # annulé avant l'envoi
+                        continue  # canceled before submission
                     self._queued.discard(uid)
                     await self._ensure_connected()
                     self._sent.add(uid)
@@ -311,10 +311,10 @@ class SSIPBackend:
                 raise
             except (OSError, SSIPError, asyncio.TimeoutError) as e:
                 reason = str(e) or type(e).__name__
-                log.warning("Speech Dispatcher : %s", reason)
+                log.warning("Speech Dispatcher: %s", reason)
                 await self._disconnect(reason)
                 if uid is not None and uid not in self._sent:
-                    self._emit(SpeechEvent(uid, "end"))  # jamais prononcé : l'invité ne doit pas attendre
+                    self._emit(SpeechEvent(uid, "end"))  # never spoken: the guest must not wait
                 await asyncio.sleep(0.5)
 
     async def _speak(self, utt: Utterance) -> None:
@@ -323,21 +323,21 @@ class SSIPBackend:
             if self._applied.get(key) != value:
                 lines = await self._command(f"SET self {key} {value}", check=False)
                 if not lines[-1].startswith("2"):
-                    log.warning("SET %s %s refusé : %s", key, value, lines[-1])
+                    log.warning("SET %s %s rejected: %s", key, value, lines[-1])
                 self._applied[key] = value
                 if key == "LANGUAGE" and self.synthesis_voice:
                     await self._command(f"SET self SYNTHESIS_VOICE {self.synthesis_voice}", check=False)
         lines = await self._command("SPEAK", check=False)
         if not lines[-1].startswith("230"):
-            log.warning("SPEAK refusé : %s", lines[-1])
+            log.warning("SPEAK rejected: %s", lines[-1])
             self._sent.discard(utt.uid)
             self._emit(SpeechEvent(utt.uid, "end"))
             return
         body = escape_data(to_ssml(utt))
         lines = await self._send(body.encode("utf-8") + b"\r\n.\r\n", uid=utt.uid)
         if not lines[-1].startswith("225"):
-            log.warning("SPEAK refusé : %s", lines[-1])
+            log.warning("SPEAK rejected: %s", lines[-1])
             self._sent.discard(utt.uid)
             self._emit(SpeechEvent(utt.uid, "end"))
             return
-        log.debug("SSIP %s <- énoncé %d : %r", lines[0][4:], utt.uid, utt.text)
+        log.debug("SSIP %s <- utterance %d: %r", lines[0][4:], utt.uid, utt.text)

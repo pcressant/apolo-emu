@@ -1,3 +1,5 @@
+[English](speech-backend.md) | Français
+
 # Backend vocal
 
 ## Speech Dispatcher (`--backend ssip`, par défaut)
@@ -86,4 +88,4 @@ Elles sont vérifiées par `tests/test_mapping.py` et ajustables avec `--rate-of
   marques sont signalées à leur position. Ce backend sert aux essais et aux tests d'intégration.
 - **`--backend null`** : sans son. Chaque énoncé est fini aussitôt.
 
-Pour écrire un autre backend, voir l'interface dans [architecture.md](architecture.md).
+Pour écrire un autre backend, voir l'interface dans [architecture-fr.md](architecture-fr.md).

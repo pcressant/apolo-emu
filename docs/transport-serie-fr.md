@@ -1,3 +1,5 @@
+[English](serial-transport.md) | Français
+
 # Transport série et contrôle de flux
 
 Trois couches sont en jeu. Elles ne doivent pas être confondues.

@@ -1,9 +1,8 @@
-"""Traduction des réglages Apollo II vers les réglages SSIP (Speech Dispatcher).
+"""Map Apollo II settings to SSIP (Speech Dispatcher) settings.
 
-Aucune mesure de l'appareil réel n'est disponible : ces correspondances sont des
-approximations choisies pour que les valeurs par défaut de l'Apollo donnent la
-parole par défaut du moteur, et que les extrêmes donnent les extrêmes. Elles sont
-documentées dans docs/backend-vocal.md et vérifiées par tests/test_mapping.py.
+No hardware measurements are available. These approximations map Apollo
+defaults to engine defaults and extreme values to engine extremes.
+Documented in docs/speech-backend.md and checked by tests/test_mapping.py.
 """
 
 from __future__ import annotations
@@ -26,7 +25,7 @@ class Mapping:
     use_voice_type: bool = True
 
     def rate(self, speed: int) -> int:
-        """@W1-9, défaut 3 (environ 80 à 580 mots/min selon le manuel) vers RATE -100..100."""
+        """@W1-9, default 3 (about 80-580 words/min in the manual) to RATE -100..100."""
         if speed <= 3:
             v = (speed - 3) * 35  # W1 = -70
         else:
@@ -34,17 +33,17 @@ class Mapping:
         return clamp(v + self.rate_offset)
 
     def pitch(self, pitch: int, step: int = 8) -> int:
-        """@F0-F, défaut 8, et @F+/@F- (léger décalage) vers PITCH -100..100."""
-        v = (pitch - 8) * 12.5 + (step - 8) * 1.25  # F0 = -100, FF = +87 ; ±10 pour @F+/@F-
+        """@F0-F, default 8, and @F+/@F- (small offset) to PITCH -100..100."""
+        v = (pitch - 8) * 12.5 + (step - 8) * 1.25  # F0 = -100, FF = +87; ±10 for @F+/@F-
         return clamp(v + self.pitch_offset)
 
     def volume(self, volume: int) -> int:
-        """@A0-F, proportion du volume du bouton, vers VOLUME -100..100 (A0 = -100, AF = +100)."""
+        """@A0-F, relative to the volume knob, to VOLUME -100..100 (A0 = -100, AF = +100)."""
         return clamp(volume * 200 / 15 - 100 + self.volume_offset)
 
     @staticmethod
     def voice_type(voice: int, speaker: int) -> str:
-        """@V1-3 voix masculines, @V4-6 non masculines (manuel 1998)."""
+        """@V1-3 male voices, @V4-6 non-male (1998 manual)."""
         if 4 <= voice <= 6:
             return f"FEMALE{voice - 3}"
         if 1 <= voice <= 3:
@@ -52,7 +51,7 @@ class Mapping:
         return "MALE1"
 
     def settings(self, p: VoiceParams) -> dict[str, str]:
-        """Commandes « SET self … » correspondant à des réglages Apollo."""
+        """SET self commands corresponding to Apollo settings."""
         out = {
             "RATE": str(self.rate(p.speed)),
             "PITCH": str(self.pitch(p.pitch, p.pitch_step)),

@@ -1,17 +1,15 @@
-"""Modèle de l'appareil Apollo II.
+"""Apollo II device model.
 
-Deux étages, comme dans le firmware (docs/protocole.md §2) :
+Two stages, as in the firmware (docs/protocol.md §2):
 
-1. Étage communication, octet par octet : mute (Ctrl-A, Ctrl-X), commandes
-   immédiates @I+ et @I?, tout le reste vers le tampon d'entrée.
-2. Étage proposition : découpage en propositions, commandes différées, puis
-   parole. Les propositions sont prononcées l'une après l'autre ; les effets
-   attachés à une proposition (échos @E, réponses, réglages) prennent effet quand
-   la parole l'atteint.
+1. Communication, byte by byte: mute (Ctrl-A/Ctrl-X), immediate @I+ and @I?
+   commands, everything else sent to the input buffer.
+2. Clause processing: split into clauses, handle deferred commands, then speak.
+   Clauses are spoken sequentially; attached effects (echoes, replies, settings)
+   take effect when speech reaches them.
 
-La classe ne fait aucune entrée-sortie : elle reçoit des octets (feed) et des
-événements du moteur vocal (on_speech_event), et produit des réponses (reply)
-et des énoncés (backend.speak).
+This class performs no I/O: it receives bytes (feed) and engine events
+(on_speech_event), and produces replies (reply) and utterances (backend.speak).
 """
 
 from __future__ import annotations
@@ -27,23 +25,23 @@ from .speech import Mark, Pause, SpeechBackend, SpeechEvent, Utterance, VoicePar
 
 log = logging.getLogger(__name__)
 
-# Extensions non authentiques, désactivées par défaut (docs/extensions.md).
+# Non-authentic extensions, disabled by default (docs/extensions.md).
 EXTENSIONS = {
-    "epaulard-index": "@I<c> renvoie c à la fin de la prochaine proposition terminée par CR (Épaulard).",
-    "word-echo": "@E renvoie son octet à sa position exacte dans la parole, et non au début de la proposition.",
-    "lenient-speed": "@W accepte un chiffre hexadécimal : 0 vaut 1, A à F valent 9 (profils Screen Reader/2).",
-    "burst-interrupt": "un nouvel envoi après un silence interrompt la parole en cours, sauf écho attendu (Sonolect).",
+    "epaulard-index": "@I<c> returns c after the next CR-terminated clause finishes speaking (Épaulard).",
+    "word-echo": "@E returns its byte at its exact speech position instead of the clause start.",
+    "lenient-speed": "@W accepts a hex digit: 0 maps to 1, A through F to 9 (Screen Reader/2 profiles).",
+    "burst-interrupt": "input after an idle gap interrupts speech unless an echo is pending (Sonolect).",
 }
 
-# Langues par défaut des emplacements de ROM et indicatifs téléphoniques utilisés par @L.
+# Default ROM-bank languages and telephone country codes used by @L.
 LANGUAGE_CODES = {
     "en": "00044", "en-gb": "00044", "en-us": "00001", "fr": "00033", "de": "00049",
     "es": "00034", "it": "00039", "nl": "00031", "pt": "00351", "sv": "00046",
     "da": "00045", "no": "00047", "fi": "00358", "cy": "10044",
 }
 
-SOUND_PAUSE_MS = (60, 120, 250, 500)  # @T : durée selon les deux bits bas (approximation)
-SOUND_X_PAUSE_MS = 100  # @Tx : « pause d'environ 100 ms » (manuel 1998)
+SOUND_PAUSE_MS = (60, 120, 250, 500)  # @T: duration from the low two bits (approximation)
+SOUND_X_PAUSE_MS = 100  # @Tx: about 100 ms pause (1998 manual)
 
 
 @dataclass
@@ -51,27 +49,27 @@ class DeviceConfig:
     codepage: str = "cp437"
     languages: dict[int, str] = field(default_factory=lambda: {1: "en"})
     extensions: frozenset[str] = frozenset()
-    # 'doc' : T = parole en cours ou propositions complètes en attente (TB25, manuel).
-    # 'rom' : T aussi quand une proposition inachevée est en cours de réception (ROM 2.01).
+    # 'doc': T = speech active or complete clauses pending (TB25, manual).
+    # 'rom': T also while an incomplete clause is being received (ROM 2.01).
     talking_rule: str = "doc"
     version_text: str = "Apolo emu, Apollo 2"
     engine_version: str = "0201"
     rom_version: str = "0404"
     dip_switches: int = 0
-    buffer_size: int = 6144  # anneau d'entrée de la ROM 2.01 ; au-delà, un vrai Apollo perd des données
+    buffer_size: int = 6144  # ROM 2.01 input ring; real hardware loses data beyond this limit
     burst_gap: float = 0.04
 
     def __post_init__(self) -> None:
         unknown = set(self.extensions) - set(EXTENSIONS)
         if unknown:
-            raise ValueError(f"extensions inconnues : {', '.join(sorted(unknown))}")
+            raise ValueError(f"unknown extensions: {', '.join(sorted(unknown))}")
         if self.talking_rule not in ("doc", "rom"):
-            raise ValueError("talking_rule doit valoir 'doc' ou 'rom'")
+            raise ValueError("talking_rule must be 'doc' or 'rom'")
 
 
 @dataclass
 class Registers:
-    """Réglages de l'appareil, valeurs brutes (interrogeables par @c?)."""
+    """Raw device settings (queryable with @c?)."""
 
     speed: int = 3
     pitch: int = 8
@@ -102,7 +100,7 @@ QUERY_LETTERS = {
     "K": "speaker", "M": "mark_space", "P": "punct", "Q": "word_pause", "R": "prosody",
     "S": "spell", "V": "voice", "W": "speed", "X": "phonetic", "$": "source",
 }
-# C (batterie du Juno, auto-test sur l'Apollo 2), Z (interrupteurs) et = (emplacement) sont traités à part.
+# C (Juno battery, Apollo 2 self-test), Z (switches), = (bank) handled separately.
 
 Action = Callable[[], None]
 
@@ -140,12 +138,12 @@ class ApolloDevice:
         self._next_mark = 1
         self.power_on()
 
-    # ------------------------------------------------------------------ état
+    # ------------------------------------------------------------------ state
 
     def power_on(self) -> None:
-        """Mise sous tension : réglages par défaut, tampons vides."""
-        self.live = Registers()  # état effectif (atteint par la parole)
-        self.projected = Registers()  # état après les propositions déjà analysées
+        """Power on: default settings, empty buffers."""
+        self.live = Registers()  # effective state reached by speech
+        self.projected = Registers()  # state after clauses already parsed
         self.cmd_char = P.DEFAULT_CMD_CHAR
         self.cmd_mode = False
         self.cmd_buf = bytearray()
@@ -177,14 +175,14 @@ class ApolloDevice:
         return self.config.talking_rule == "rom" and self.clauses.pending > 0
 
     def reply(self, data: bytes) -> None:
-        log.debug("RÉPONSE %s", data.hex(" "))
+        log.debug("REPLY %s", data.hex(" "))
         if self.reply_sink is not None:
             self.reply_sink(data)
 
-    # ------------------------------------------------- étage communication
+    # ------------------------------------------------ communication stage
 
     def feed(self, data: bytes) -> None:
-        """Octets reçus de l'ordinateur, dans l'ordre, en morceaux quelconques."""
+        """Bytes received from the host, in order, in arbitrary chunks."""
         if not data:
             return
         now = self.clock()
@@ -196,7 +194,7 @@ class ApolloDevice:
             and self.clauses.pending == 0
             and not self._echo_awaited()
         ):
-            log.debug("burst-interrupt : interruption implicite")
+            log.debug("burst-interrupt: implicit interruption")
             self.mute()
         self.last_rx = now
         for b in data:
@@ -209,7 +207,7 @@ class ApolloDevice:
             return
         if b == self.cmd_char:
             if self.cmd_mode:
-                log.debug("« @ » répété : le premier est perdu (comme sur la ROM)")
+                log.debug("repeated @: the first is lost (as in the ROM)")
             self.cmd_mode = True
             self.cmd_buf.clear()
             return
@@ -229,16 +227,16 @@ class ApolloDevice:
                 self.index_count = 0
                 self.index_reset = False
             self.index_count = (self.index_count + 1) & 0xFF
-        # @I+ et toute séquence non immédiate passent dans le tampon d'entrée.
+        # @I+ and all non-immediate sequences pass into the input buffer.
         pending = bytes(self.cmd_buf)
         self._to_input(self.cmd_char)
         for c in pending:
             self._to_input(c)
 
     def mute(self) -> None:
-        """Ctrl-A / Ctrl-X : silence immédiat, tampons vidés, compteur d'index conservé."""
+        """Ctrl-A / Ctrl-X: stop immediately, clear buffers, preserve index counter."""
         had_speech = any(isinstance(e, _Spoken) for e in self.timeline)
-        log.info("mute (Ctrl-X ou Ctrl-A)")
+        log.info("mute (Ctrl-X or Ctrl-A)")
         self.cmd_mode = False
         self.cmd_buf.clear()
         self.clauses.reset()
@@ -253,7 +251,7 @@ class ApolloDevice:
         if had_speech:
             self.backend.cancel()
         if lost:
-            log.debug("mute : %d élément(s) de parole abandonné(s)", lost)
+            log.debug("mute: %d speech item(s) discarded", lost)
 
     def _to_input(self, b: int) -> None:
         done = self.clauses.push(b, self.cmd_char)
@@ -261,18 +259,18 @@ class ApolloDevice:
             raw, by_cr = done
             self._clause(P.scan_clause(raw, self.cmd_char, self._deferred_table, by_cr))
 
-    # ---------------------------------------------------- étage proposition
+    # ------------------------------------------------------- clause stage
 
     def _clause(self, clause: P.Clause) -> None:
         reg = self.projected
-        start: list[Action] = []  # effets au début de la proposition
+        start: list[Action] = []  # effects at clause start
 
-        # Les commandes de l'étage proposition agissent sur toute la proposition :
-        # elles sont appliquées d'abord, à l'état projeté.
+        # Clause-stage commands affect the whole clause:
+        # apply them first to the projected state.
         positioned = [cmd for cmd in clause.commands if not self._phrase_command(cmd, reg, start)]
 
-        # Puis le texte, coupé par les commandes synchronisées avec la parole.
-        # Un changement de volume ouvre un nouveau segment (nouveaux réglages du moteur).
+        # Then text, split by speech-synchronized commands.
+        # A volume change starts a new segment with new engine settings.
         segments: list[list] = [[]]
         seg_params: list[VoiceParams] = [self._voice_params(reg)]
         text = clause.text
@@ -304,7 +302,7 @@ class ApolloDevice:
             elif cmd.name == "sound":
                 if v < 0x10:
                     parts.append(Pause(SOUND_PAUSE_MS[v & 3]))
-                    log.info("@T%X : effet sonore remplacé par un silence", v)
+                    log.info("@T%X: sound effect replaced with a pause", v)
                 elif upcase_char(cmd.arg) == "X":
                     parts.append(Pause(SOUND_X_PAUSE_MS))
             elif cmd.name == "echo":  # extension word-echo
@@ -321,7 +319,7 @@ class ApolloDevice:
         self._check_backlog()
 
     def _phrase_command(self, cmd: P.Command, reg: Registers, start: list[Action]) -> bool:
-        """Applique une commande de l'étage proposition. Renvoie False si elle est positionnée."""
+        """Apply a clause-stage command; return False for a positioned command."""
         name = cmd.name
         v = P.hex_value(cmd.arg)
         if name in ("volume", "voicing", "index_mark", "sound", "version"):
@@ -336,7 +334,7 @@ class ApolloDevice:
             if 1 <= v <= 9:
                 self._set(reg, start, speed=v)
             else:
-                log.info("@W%s rejeté par la ROM (plage 1-9)", chr(cmd.arg))
+                log.info("@W%s rejected by ROM (range 1-9)", chr(cmd.arg))
         elif name == "pitch":
             if cmd.arg == ord("+"):
                 self._set(reg, start, pitch_step=0x10)
@@ -367,9 +365,9 @@ class ApolloDevice:
             if v <= 1:
                 self._set(reg, start, **{name: v})
                 if name == "hyper" and v:
-                    log.info("@H1 : l'hypermode n'est pas émulé")
+                    log.info("@H1: hypermode is not emulated")
                 if name == "phonetic" and v:
-                    log.info("@X1 : le mode phonétique n'est pas émulé ; le texte est lu tel quel")
+                    log.info("@X1: phonetic mode is not emulated; text is spoken as received")
         elif name == "source":
             if v < 8:
                 self._set(reg, start, source=v)
@@ -377,8 +375,8 @@ class ApolloDevice:
             if v == 0:
                 self._set(reg, start, voice=0)
             elif v <= 6:
-                # Préréglages : table du locuteur et source (ROM) ; voisement, rapport cyclique
-                # et hauteur propres à chaque voix inconnus, donc conservés.
+                # Presets: speaker table and source (ROM); voice-specific voicing, duty cycle
+                # and pitch are unknown, so preserve them.
                 self._set(reg, start, voice=v, speaker=1 if v >= 4 else 0, source=7 if v >= 4 else 0)
         elif name == "formant":
             d = P.hex_value(cmd.raw[1])
@@ -388,12 +386,12 @@ class ApolloDevice:
                 value = (P.hex_value(digits[0]) << 4) + P.hex_value(digits[1])
                 if value < 0x100:
                     reg.formants[d] = value if sign == ord("+") else -value
-            # La forme à un chiffre est reconnue mais sans effet (ROM).
+            # The one-digit form is recognized but has no effect (ROM).
         elif name == "bank":
             if v in self.config.languages:
                 self._set(reg, start, bank=v)
             else:
-                log.info("@=%d : emplacement de ROM vide, ignoré", v)
+                log.info("@=%d: empty ROM bank, ignored", v)
         elif name == "query":
             start.append(lambda letter=cmd.raw[0]: self._query(letter))
         elif name == "languages":
@@ -402,11 +400,11 @@ class ApolloDevice:
             fresh = Registers(bank=reg.bank)
             self._set(reg, start, **{k: getattr(fresh, k) for k in QUERY_LETTERS.values()})
         elif name == "ext_epaulard_index":
-            pass  # traité dans _epaulard_clause
+            pass  # handled in _epaulard_clause
         elif name == "ignore":
-            log.debug("@%s sans effet (ROM 2)", cmd.raw.decode("latin-1"))
-        else:  # pragma: no cover - table et gestionnaires sont tenus en accord
-            log.warning("commande sans gestionnaire : %s", cmd)
+            log.debug("@%s has no effect (ROM 2)", cmd.raw.decode("latin-1"))
+        else:  # pragma: no cover - table and handlers are kept consistent
+            log.warning("command without handler: %s", cmd)
         return True
 
     def _set(self, reg: Registers, start: list[Action], **values: int) -> None:
@@ -420,7 +418,7 @@ class ApolloDevice:
         start.append(apply)
 
     def _epaulard_clause(self, clause: P.Clause) -> None:
-        """Extension epaulard-index : la marque revient quand la parole jusqu'au CR est finie."""
+        """epaulard-index: return the mark once speech through CR has finished."""
         for cmd in clause.commands:
             if cmd.name == "ext_epaulard_index":
                 self.ext_pending_echo = cmd.arg
@@ -439,7 +437,7 @@ class ApolloDevice:
         return echo
 
     def _echo_awaited(self) -> bool:
-        """Un écho (@E, extension @I<c>) attend encore que la parole l'atteigne."""
+        """An echo (@E or @I<c> extension) is still waiting for speech to reach it."""
         for e in [*self.timeline, *self.batch]:
             groups = [e.actions] if isinstance(e, _Immediate) else [a for _, a in e.marks]
             if any(getattr(action, "is_echo", False) for g in groups for action in g):
@@ -455,13 +453,13 @@ class ApolloDevice:
         if ch in QUERY_LETTERS:
             value = getattr(self.live, QUERY_LETTERS[ch])
         elif ch == "C":
-            value = 0  # échec de l'auto-test : jamais
+            value = 0  # self-test failure: never
         elif ch == "Z":
             value = self.config.dip_switches
         elif ch == "=":
             value = self.live.bank
         else:
-            log.info("@%s? : réglage non interrogeable, pas de réponse", ch)
+            log.info("@%s?: setting not queryable, no reply", ch)
             return
         self.reply(ch.encode("latin-1") + P.hex_reply(value))
 
@@ -470,14 +468,14 @@ class ApolloDevice:
         for slot in range(1, 8):
             lang = self.config.languages.get(slot)
             if lang is None:
-                out += b"0" * 14  # contenu réel d'un emplacement vide : inconnu
+                out += b"0" * 14  # actual empty-bank contents: unknown
             else:
                 code = LANGUAGE_CODES.get(lang.lower(), "00000")
                 out += (code + "0" + self.config.engine_version + self.config.rom_version).encode("ascii")
         out.append(P.CR)
         self.reply(bytes(out))
 
-    # ------------------------------------------------------ chronologie
+    # ---------------------------------------------------------- timeline
 
     def _new_mark(self, actions: list[Action]) -> Mark:
         name = f"m{self._next_mark}"
@@ -502,15 +500,15 @@ class ApolloDevice:
         out = []
         for ch in data.decode(self.config.codepage, errors="replace"):
             if ord(ch) < 0x20 or ord(ch) == 0x7F:
-                out.append(" ")  # la ROM traite les codes de contrôle comme des espaces
+                out.append(" ")  # the ROM treats control codes as spaces
             elif ch == "@" and not reg.punct:
-                out.append(" ")  # caractère de commande resté dans le texte : muet sans @P1
+                out.append(" ")  # command character left in text: silent without @P1
             else:
                 out.append(ch)
         return "".join(out)
 
     def _make_entry(self, vp: VoiceParams, parts: list, start: list[Action], raw: int) -> _Spoken | _Immediate:
-        # Les actions des marques sont retrouvées par nom.
+        # Mark actions are looked up by name.
         marks: list[tuple[str, list[Action]]] = []
         if start:
             head = Mark(f"m{self._next_mark}")
@@ -540,12 +538,11 @@ class ApolloDevice:
         return False
 
     def _enqueue(self, entry: _Spoken | _Immediate) -> None:
-        """Ajoute au lot ; fusionne les énoncés consécutifs aux réglages identiques.
+        """Append to the batch; merge consecutive utterances with matching settings.
 
-        Un seul message fluide pour le moteur, avec des marques aux bons endroits. Les
-        propositions muettes situées entre deux textes fusionnés deviennent une marque
-        à la jonction ; en fin de lot, elles restent des éléments séparés, exécutés à
-        la fin effective de la parole (événement END).
+        One fluent engine message, with marks at the right positions. Silent clauses
+        between merged texts become marks at their junction; trailing silent clauses
+        remain separate items executed at the actual end of speech (END event).
         """
         if isinstance(entry, _Spoken):
             k = len(self.batch)
@@ -571,13 +568,13 @@ class ApolloDevice:
         for entry in batch:
             self.timeline.append(entry)
             if isinstance(entry, _Spoken):
-                log.info("parole %d : %s", entry.utt.uid, entry.utt.text)
+                log.info("speech %d: %s", entry.utt.uid, entry.utt.text)
                 self.backend.speak(entry.utt)
         self._pump()
 
     def _pump(self) -> None:
-        """Exécute les éléments prêts en tête de chronologie, dont les actions des
-        propositions muettes qui attendaient la fin de la parole précédente."""
+        """Run ready timeline items, including silent-clause actions that were waiting
+        for preceding speech to finish."""
         if self._pumping:
             return
         self._pumping = True
@@ -596,12 +593,12 @@ class ApolloDevice:
             self._pumping = False
 
     def on_speech_event(self, ev: SpeechEvent) -> None:
-        """Progression signalée par le moteur vocal."""
+        """Progress reported by the speech engine."""
         idx = next((i for i, e in enumerate(self.timeline) if isinstance(e, _Spoken) and e.utt.uid == ev.uid), None)
         if idx is None:
-            log.debug("événement ignoré (énoncé abandonné) : %s", ev)
+            log.debug("event ignored (discarded utterance): %s", ev)
             return
-        # Le moteur parle dans l'ordre : tout ce qui précède est terminé.
+        # The engine speaks in order: all preceding utterances are finished.
         for i in range(idx):
             prev = self.timeline[i]
             if isinstance(prev, _Spoken) and not prev.done:
@@ -623,7 +620,7 @@ class ApolloDevice:
     def _fire_until(self, entry: _Spoken, mark: str | None) -> None:
         names = [n for n, _ in entry.marks]
         if mark not in names:
-            log.debug("marque inconnue %r", mark)
+            log.debug("unknown mark %r", mark)
             return
         upto = names.index(mark) + 1
         fired, entry.marks = entry.marks[:upto], entry.marks[upto:]
@@ -646,7 +643,7 @@ class ApolloDevice:
         if backlog > self.config.buffer_size and not self._overflow_warned:
             self._overflow_warned = True
             log.warning(
-                "%d octets en attente : un véritable Apollo II (tampon de %d octets) aurait perdu des données",
+                "%d bytes pending: a real Apollo II (%d-byte buffer) would have lost data",
                 backlog, self.config.buffer_size,
             )
         elif backlog <= self.config.buffer_size // 2:

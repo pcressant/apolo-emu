@@ -1,116 +1,114 @@
+English | [Français](architecture-fr.md)
+
 # Architecture
 
 ## Modules
 
-| Module | Rôle | Dépend de |
+| Module | Role | Dependencies |
 |---|---|---|
-| `protocol.py` | Tables et fonctions pures : motifs de commandes, `hex_value`, réponses hexadécimales, découpage en propositions (`ClauseAccumulator`), analyse (`scan_clause`) | rien |
-| `device.py` | **L'appareil** : étages communication et proposition, registres, chronologie de la parole, réponses | `protocol`, `speech` |
-| `speech.py` | Interface du backend vocal (`SpeechBackend`, `Utterance`, `SpeechEvent`, `VoiceParams`) et backends sans son (`NullBackend`, `SimulatedBackend`) | rien |
-| `mapping.py` | Traduction des réglages Apollo en réglages SSIP | `speech` |
-| `ssip.py` | Backend Speech Dispatcher : client SSIP asynchrone, SSML, événements | `speech`, `mapping` |
-| `transport.py` | Socket Unix (écoute ou connexion), sockets obsolètes, journal des octets | `device` |
-| `app.py` | Assemblage d'un émulateur complet à partir des options ; mode autonome | tous |
-| `launcher.py` | Lanceur QEMU : arguments, répertoire d'instance, signaux, nettoyage | `app` |
-| `cli.py` | Ligne de commande | `app`, `launcher` |
+| `protocol.py` | Pure tables and functions: command patterns, `hex_value`, hexadecimal replies, clause accumulation (`ClauseAccumulator`) and parsing (`scan_clause`) | none |
+| `device.py` | **The device**: communication and clause stages, registers, speech timeline and replies | `protocol`, `speech` |
+| `speech.py` | Speech backend interface (`SpeechBackend`, `Utterance`, `SpeechEvent`, `VoiceParams`) and silent backends (`NullBackend`, `SimulatedBackend`) | none |
+| `mapping.py` | Maps Apollo settings to SSIP settings | `speech` |
+| `ssip.py` | Speech Dispatcher backend: asynchronous SSIP client, SSML and events | `speech`, `mapping` |
+| `transport.py` | Unix socket server or client, stale sockets and byte logging | `device` |
+| `app.py` | Builds a complete emulator from options; standalone mode | all |
+| `launcher.py` | QEMU launcher: arguments, instance directory, signals and cleanup | `app` |
+| `cli.py` | Command-line interface | `app`, `launcher` |
 
-Le cœur (`protocol`, `device`) ne fait aucune entrée-sortie et ne connaît ni QEMU, ni la socket, ni
-Speech Dispatcher, ni le système invité. Il est synchrone et se teste octet par octet.
+The core (`protocol`, `device`) performs no I/O and knows nothing about QEMU, the socket,
+Speech Dispatcher or the guest system. It is synchronous and can be tested byte by byte.
 
 ## Interfaces
 
 ```python
-# Appareil
+# Device
 device = ApolloDevice(backend, reply=callable_bytes, config=DeviceConfig(...))
-device.feed(data: bytes)                # octets reçus, en morceaux quelconques
-device.on_speech_event(ev: SpeechEvent) # progression signalée par le backend
-# réponses : reply(bytes) ; parole : backend.speak(Utterance), backend.cancel()
+device.feed(data: bytes)                # received bytes, in arbitrary chunks
+device.on_speech_event(ev: SpeechEvent) # progress reported by the backend
+# replies: reply(bytes); speech: backend.speak(Utterance), backend.cancel()
 
-# Backend vocal (speech.SpeechBackend)
+# Speech backend (speech.SpeechBackend)
 set_event_sink(sink)      # sink(SpeechEvent(uid, "begin" | "mark" | "end" | "cancel", mark))
-speak(utt: Utterance)     # met en file, après les énoncés en cours
-cancel()                  # silence immédiat, file vidée
+speak(utt: Utterance)     # queue after utterances already in progress
+cancel()                  # stop immediately and clear the queue
 async start(), async close()
 ```
 
-Un `Utterance` est une suite de parties : du texte (`str`), des marques (`Mark(name)`) et des silences
-(`Pause(ms)`). Il porte ses `VoiceParams`, exprimés en **valeurs Apollo** : la traduction appartient au
-backend.
+An `Utterance` is a sequence of text (`str`), marks (`Mark(name)`) and pauses (`Pause(ms)`).
+Its `VoiceParams` use **Apollo values**; mapping them is the backend's responsibility.
 
-Un autre moteur se branche en écrivant une classe qui respecte ces cinq méthodes. Il doit signaler au minimum
-`end` pour chaque énoncé ; `mark` et `begin` améliorent la précision.
+To support another engine, implement these five methods. Report at least `end` for every utterance;
+`mark` and `begin` improve precision.
 
-## Modèle de l'appareil
+## Device model
 
-Le firmware traite les données en deux étages (voir [protocole.md](protocole.md) §2) :
+The firmware processes data in two stages (see [protocol.md](protocol.md) §2):
 
-1. **Étage communication** (`_receive`), octet par octet :
-   - Ctrl-A et Ctrl-X déclenchent `mute()` ;
-   - `@` passe en mode commande immédiate : `@I?` répond tout de suite, `@I+` incrémente le compteur ;
-   - le reste va dans le tampon d'entrée.
-2. **Étage proposition** (`_clause`) :
-   - `ClauseAccumulator` découpe le flux sur CR, sur la ponctuation et selon les longueurs limites ;
-   - `scan_clause` retire les commandes reconnues ;
-   - `_phrase_command` applique les commandes de l'étage proposition à l'**état projeté** ;
-   - les commandes synchronisées (`@A`, `@B`, `@I+`, `@T`) deviennent des marques ou des silences à leur position.
+1. **Communication stage** (`_receive`), byte by byte:
+   - Ctrl-A and Ctrl-X call `mute()`.
+   - `@` enters immediate-command mode: `@I?` replies immediately and `@I+` increments the counter.
+   - Everything else goes into the input buffer.
+2. **Clause stage** (`_clause`):
+   - `ClauseAccumulator` splits the stream at CR, punctuation and length limits.
+   - `scan_clause` removes recognized commands.
+   - `_phrase_command` applies clause-stage commands to the **projected state**.
+   - Speech-synchronized commands (`@A`, `@B`, `@I+`, `@T`) become marks or pauses at their positions.
 
-### Deux états de registres
+### Two register states
 
-- `projected` : l'état après toutes les propositions déjà analysées. Il sert à fixer les réglages des énoncés
-  au moment où on les construit.
-- `live` : l'état atteint par la parole. Il est modifié par les actions quand la parole y arrive, et c'est lui
-  que lisent les interrogations `@c?`.
+- `projected`: the state after all clauses parsed so far. It determines utterance settings at construction time.
+- `live`: the state reached by speech. Actions update it as speech progresses; `@c?` queries read this state.
 
-Après un mute, `projected` redevient égal à `live`. Les réglages des propositions effacées n'ont donc jamais
-pris effet, comme sur l'appareil.
+After muting, `projected` becomes equal to `live` again. Settings from discarded clauses therefore
+never take effect, as on the hardware.
 
-### Chronologie
+### Timeline
 
-`timeline` est la file ordonnée de ce qui reste à « jouer ». Elle contient deux sortes d'éléments :
-- **`_Spoken`** : un énoncé confié au backend. Il porte la liste de ses marques et, pour chacune, les actions à
-  exécuter : échos, réponses, mises à jour de `live`, décompte d'index.
-- **`_Immediate`** : les actions d'une proposition qui n'a rien à dire. Elles s'exécutent dès que tout ce qui
-  précède est terminé.
+`timeline` is the ordered queue of remaining playback items:
 
-Règles :
-- **Début de proposition.** Chaque proposition qui a des effets reçoit une marque initiale. Les actions de
-  l'étage proposition (échos `@E`, réponses `@c?` et `@L`, réglages) y sont rattachées. Elles s'exécutent quand
-  la parole atteint la proposition, c'est-à-dire juste après la fin de la précédente, comme sur l'Apollo dont
-  la lecture est séquentielle.
-- **Fusion.** Les propositions reçues dans une même lecture et qui ont les mêmes réglages forment **un seul
-  message**. Il n'y a jamais un message par mot.
-  - Une proposition muette coincée entre deux textes devient une marque à la jonction.
-  - En fin de lot, elle reste un élément `_Immediate`, exécuté à la fin effective de la parole (événement END).
-- **Changement de réglages.** Un changement de volume au milieu d'une proposition, ou un changement de réglage
-  d'une proposition à l'autre, ouvre un nouveau message : SSIP applique ses réglages message par message.
-- **Ordre.** Un événement reçu pour l'énoncé N termine tous les énoncés précédents : le moteur parle dans
-  l'ordre.
-- **Annulation.** Un événement `cancel` abandonne les actions restantes de l'énoncé : ses échos sont perdus,
-  comme ceux d'une proposition effacée par un mute.
+- **`_Spoken`**: an utterance submitted to the backend, with marks and their actions: echoes, replies,
+  `live` updates and index decrements.
+- **`_Immediate`**: actions from a clause with nothing to say. They run once all preceding items finish.
 
-### `T` ou `M` dans la réponse à `@I?`
+Rules:
 
-`talking` est vrai s'il reste un énoncé parlé dans la chronologie ou dans le lot en cours.
+- **Clause start.** Each clause with effects receives an initial mark. Clause-stage actions (`@E` echoes,
+  `@c?` and `@L` replies, settings) attach to it. They run when speech reaches the clause, immediately
+  after the preceding clause finishes, matching the Apollo's sequential playback.
+- **Merging.** Clauses received in the same read and using the same settings form **one message**.
+  Speech is never systematically split into one message per word.
+  - A silent clause between two texts becomes a mark at their junction.
+  - At the end of a batch, it remains an `_Immediate` item executed at the actual end of speech (END).
+- **Settings changes.** A volume change within a clause, or a settings change between clauses,
+  starts a new message: SSIP applies settings per message.
+- **Order.** An event for utterance N completes all preceding utterances: the engine speaks in order.
+- **Cancellation.** A `cancel` event discards remaining actions for the utterance. Its echoes are lost,
+  just like those of a clause erased by muting.
 
-Avec `--talking-rule rom`, il l'est aussi pendant qu'une proposition inachevée est en cours de réception. Voir
-[protocole.md](protocole.md) §2.4.
+### `T` or `M` in the `@I?` reply
 
-## Concurrence
+`talking` is true while a spoken utterance remains in the timeline or current batch.
 
-Tout tourne dans une seule boucle asyncio et un seul fil :
-- le transport appelle `device.feed()` à chaque lecture de la socket ;
-- le backend appelle `device.on_speech_event()` depuis sa tâche de lecture SSIP.
+With `--talking-rule rom`, it is also true while an incomplete clause is being received.
+See [protocol.md](protocol.md) §2.4.
 
-L'appareil n'est jamais appelé en parallèle. Un appel réentrant (un backend qui signale un événement pendant
-`speak()`) est toléré.
+## Concurrency
 
-## Journalisation
+Everything runs in one asyncio event loop on one thread:
 
-- Les journaux passent par le module `logging`, sur la sortie d'erreur, à quatre niveaux (`--log-level`).
-- Les commandes inconnues, les valeurs rejetées et les fonctions non émulées sont signalées au niveau `info`.
-- Le niveau `debug` détaille chaque lecture et chaque événement vocal.
-- `--trace FICHIER` ajoute une ligne par lecture ou écriture sur le port série :
-  `secondes RX|TX octets-hexadécimaux`, par exemple `   12.3456 RX 40 49 3f`.
-  Le fichier est ouvert en ajout ; chaque démarrage écrit d'abord une ligne `# début AAAA-MM-JJ hh:mm:ss`,
-  origine des secondes qui suivent.
-  Ce format permet de rejouer ou d'analyser une session.
+- The transport calls `device.feed()` on each socket read.
+- The backend calls `device.on_speech_event()` from its SSIP reader task.
+
+The device is never called concurrently. Reentrant calls are supported, including a backend
+reporting an event during `speak()`.
+
+## Logging
+
+- Logs use `logging`, on standard error, with four levels (`--log-level`).
+- Unknown commands, rejected values and unsupported features are reported at `info` level.
+- `debug` details every read and speech event.
+- `--trace FILE` adds a line per serial read or write:
+  `seconds RX|TX hex-bytes`, for example `   12.3456 RX 40 49 3f`.
+  The file is opened in append mode. Each run first writes `# start YYYY-MM-DD hh:mm:ss`,
+  the origin for subsequent relative timestamps. This format allows session replay or analysis.

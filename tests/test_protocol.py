@@ -6,14 +6,14 @@ from apolo_emu import protocol as P
 class HexTests(unittest.TestCase):
     def test_hex_value_like_rom(self):
         self.assertEqual([P.hex_value(ord(c)) for c in "09AaFfZz"], [0, 9, 10, 10, 15, 15, 35, 35])
-        # « : » à « @ » valent 35 ; les autres caractères donnent des valeurs hors plage.
+        # ':' through '@' yield 35; other characters yield out-of-range values.
         self.assertEqual(P.hex_value(ord(":")), 35)
         self.assertEqual(P.hex_value(ord("@")), 35)
         self.assertGreaterEqual(P.hex_value(ord("+")), 16)
         self.assertGreaterEqual(P.hex_value(ord(" ")), 16)
 
     def test_hex_reply_low_nibble_first(self):
-        self.assertEqual(P.hex_reply(6), b"60")  # manuel : @A? -> A60
+        self.assertEqual(P.hex_reply(6), b"60")  # manual: @A? -> A60
         self.assertEqual(P.hex_reply(0x1E), b"E1")
         self.assertEqual(P.hex_reply(0x100), b"00")
 

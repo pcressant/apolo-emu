@@ -1,209 +1,178 @@
-# Guide de reprise — Apolo-emu
+English | [Français](AGENT-fr.md)
 
-Ce fichier est la référence commune pour les agents qui travaillent sur ce dépôt.
-`AGENTS.md` (Codex) et `CLAUDE.md` (Claude Code) sont des liens vers ce fichier :
-modifier uniquement `AGENT.md` pour conserver une seule version des consignes.
-Communiquer, commenter et rédiger la documentation en français.
+# Resuming work — Apolo-emu
 
-Le cahier des charges complet est dans `docs/cahier-des-charges.md`. Ce guide en
-résume les règles durables ; en cas de doute, le cahier des charges fait foi.
+This is the shared reference for agents working in this repository. `AGENTS.md` (Codex) and
+`CLAUDE.md` (Claude Code) are symbolic links to this file: edit only `AGENT.md` to keep one
+authoritative set of instructions. Keep its French translation in `AGENT-fr.md` consistent.
+Communicate with the user in their language; write code comments and primary documentation in English.
+French documentation uses the `-fr.md` suffix and links to its English counterpart.
 
-## But
+The full requirements are in `docs/requirements.md`. This guide summarizes lasting rules;
+when in doubt, the requirements take precedence.
 
-Apolo-emu émule un **synthétiseur vocal matériel Apollo II** branché sur un port
-série, tel qu'utilisé dans les années 1990 par les lecteurs d'écran DOS, Windows et
-OS/2. L'objectif est la fidélité **protocolaire et comportementale** (commandes,
-réponses, synchronisation, contrôle de flux, particularités), pas le timbre exact.
-Le moteur vocal est eSpeak NG via Speech Dispatcher, derrière une interface
-remplaçable.
+## Goal
 
-Ce n'est pas un framework générique de synthèse vocale : on émule un appareil précis.
+Apolo-emu emulates an **Apollo II hardware speech synthesizer** connected to a serial port,
+as used by DOS, Windows and OS/2 screen readers in the 1990s. The goal is **protocol and behavioral
+fidelity** (commands, replies, synchronization, flow control, quirks), not the exact voice.
+The speech engine is eSpeak NG through Speech Dispatcher behind a replaceable interface.
 
-Priorités, dans l'ordre :
+This emulates one specific device; it is not a generic speech framework.
 
-1. Fidélité au protocole Apollo II historique.
-2. Compatibilité avec les lecteurs d'écran d'époque.
-3. Fiabilité des échanges série.
-4. Synchronisation correcte de la parole.
-5. Indépendance vis-à-vis de QEMU et des systèmes invités.
-6. Simplicité d'utilisation du lanceur intégré.
-7. Qualité et maintenabilité du code.
+Priorities, in order:
 
-## Reprendre rapidement
+1. Historical Apollo II protocol fidelity.
+2. Compatibility with historical screen readers.
+3. Reliable serial communication.
+4. Correct speech synchronization.
+5. Independence from QEMU and guest systems.
+6. Ease of use through the integrated launcher.
+7. Code quality and maintainability.
 
-1. Lire ce guide, puis `git status --short` et `git log -6 --oneline` ; préserver
-   les modifications existantes.
-2. Consulter `docs/` (protocole, architecture, matrice de compatibilité,
-   limitations) avant de modifier un comportement.
-3. Faire une modification ciblée, exécuter les tests adaptés et indiquer clairement
-   ce qui a été testé automatiquement, testé avec Speech Dispatcher, ou essayé dans
-   une VM.
-4. Mettre à jour la documentation et la matrice de compatibilité si le comportement
-   change. Ajouter ici les pièges durables, pas un journal de session.
+## Quick restart
 
-## Carte du dépôt
+1. Read this guide, then `git status --short` and `git log -6 --oneline`; preserve existing changes.
+2. Consult `docs/` (protocol, architecture, compatibility, limitations) before changing behavior.
+3. Make a focused change, run appropriate tests, and clearly distinguish automated tests,
+   actual Speech Dispatcher tests and VM trials.
+4. Update documentation and compatibility status when behavior changes. Record lasting pitfalls here,
+   not a session diary.
 
-| Chemin | Rôle |
+## Repository map
+
+| Path | Role |
 |---|---|
-| `apolo_emu/protocol.py` | tables et fonctions pures : motifs, `hex_value`, propositions |
-| `apolo_emu/device.py` | l'appareil : deux étages, registres, chronologie, extensions |
-| `apolo_emu/speech.py`, `mapping.py`, `ssip.py` | interface vocale, correspondance SSIP, client SSIP |
-| `apolo_emu/transport.py` | socket Unix (écoute ou connexion), trace des octets |
-| `apolo_emu/app.py`, `launcher.py`, `cli.py` | assemblage, lanceur QEMU, ligne de commande |
-| `tests/` | unittest ; `fakes.py` (faux backend), `fake_qemu.py`, `guest.py` (secteur d'amorçage) |
-| `docs/protocole.md` | référence du protocole, avec la source de chaque point |
-| `docs/compatibilite.md`, `limitations.md`, `bilan.md` | état, limites, compte rendu |
+| `apolo_emu/protocol.py` | pure tables/functions: patterns, `hex_value`, clauses |
+| `apolo_emu/device.py` | device: two stages, registers, timeline, extensions |
+| `apolo_emu/speech.py`, `mapping.py`, `ssip.py` | speech interface, SSIP mapping/client |
+| `apolo_emu/transport.py` | Unix socket server/client, byte trace |
+| `apolo_emu/app.py`, `launcher.py`, `cli.py` | assembly, QEMU launcher, CLI |
+| `tests/` | unittest; `fakes.py` (fake backend), `fake_qemu.py`, `guest.py` (boot sector) |
+| `docs/protocol.md` | protocol reference, source attributed for every point |
+| `docs/compatibility.md`, `limitations.md`, `development-report.md` | status, limits, report |
 
-Tests : `python3 -m unittest discover -s tests -t .` (environ 4 s ; QEMU utilisé s'il
-est présent). Parole réelle : `APOLO_EMU_SPEECHD=1 python3 -m unittest
-tests.test_speechd_integration`. `nix-build` relance la suite.
+Tests: `python3 -m unittest discover -s tests -t .` (about 4 s; uses QEMU if present).
+Actual speech: `APOLO_EMU_SPEECHD=1 python3 -m unittest tests.test_speechd_integration`.
+`nix-build` reruns the suite.
 
-## Projets voisins
+## Neighboring projects
 
-- `../pc486` : DOS / Windows 3.11, Sonolect 7.11 et Épaulard. Depuis le 25 octobre
-  2026, `scripts/pc486` lance Apolo-emu (`gateway_start`) et Épaulard utilise l'écho
-  authentique `@E` ; l'ancienne passerelle `gateway/apollo2spd.py` est dans son
-  historique git.
-- `../os2` : OS/2 Warp 4, IBM Screen Reader/2 2.01 ; documentation historique dans
-  `../os2/media/screen-reader/apollo-source/` (`APOLLO.TXT`, `APOLLO2.TXT`),
-  investigation et correctif QEMU sur le port série. `scripts/gateway` lance
-  Apolo-emu depuis le 25 octobre 2026 (dossier non versionné, ancienne passerelle
-  `gateway/apollo2spd.py` conservée mais inutilisée).
+- `../pc486`: DOS / Windows 3.11, Sonolect 7.11 and Épaulard. Since October 25, 2026,
+  `scripts/pc486` launches Apolo-emu (`gateway_start`); Épaulard uses authentic `@E` echoes.
+  The old `gateway/apollo2spd.py` remains in its Git history.
+- `../os2`: OS/2 Warp 4, IBM Screen Reader/2 2.01; historical documentation under
+  `../os2/media/screen-reader/apollo-source/` (`APOLLO.TXT`, `APOLLO2.TXT`), serial-port investigation
+  and QEMU patch. `scripts/gateway` has launched Apolo-emu since October 25, 2026
+  (unversioned directory; old `gateway/apollo2spd.py` retained but unused).
 
-Règles strictes :
+Strict rules:
 
-- Les lire librement. Les modifier, toucher à leurs VM ou à leurs configurations QEMU,
-  ou interrompre leurs processus seulement sur demande explicite de l'utilisateur, en
-  suivant leur propre guide (`AGENT.md`, `docs/REPRISE.md`). Un changement d'option ou
-  d'extension d'Apolo-emu peut modifier leur comportement : vérifier leurs scripts.
-- Ne pas lancer leurs machines virtuelles sans nécessité **et** autorisation
-  explicite de l'utilisateur.
-- Leurs passerelles sont des prototypes : identifier ce qui est correct, approximatif
-  ou erroné ; ne pas les traiter comme des références incontestables.
-- Ne pas copier leur code aveuglément : comprendre, valider, vérifier licence et
-  provenance.
+- Read them freely. Modify them, touch their VMs/QEMU configuration or interrupt their processes
+  only at the user's explicit request, following their own guides (`AGENT.md`, `docs/REPRISE.md`).
+  Apolo-emu option/extension changes can affect them: inspect their scripts.
+- Do not start their VMs without both necessity **and explicit user permission**.
+- Their gateways are prototypes: distinguish correct behavior, approximations and errors;
+  do not treat them as unquestionable references.
+- Do not copy code blindly: understand it, validate it, and check license and provenance.
 
-## Sources et traçabilité
+## Sources and traceability
 
-Sources à confronter : `APOLLO.TXT`, `APOLLO2.TXT`, archives et pilotes Apollo
-d'IBM Screen Reader/2, notes des deux projets, pilotes Speakup du noyau Linux
-(`drivers/accessibility/speakup/`, vérifier les pilotes réellement présents et le
-modèle qu'ils visent), autres documentations publiques.
+Cross-check `APOLLO.TXT`, `APOLLO2.TXT`, IBM Screen Reader/2 Apollo archives/drivers, notes from both
+projects, Linux Speakup drivers (`drivers/accessibility/speakup/`; verify actual driver names and
+target models), and other public documentation.
 
-- Ne jamais déduire une commande de son seul nom ; confronter les sources.
-- Attention aux commandes homonymes dont le sens diffère entre Apollo et Apollo II.
-- Chaque comportement documenté doit être classé :
-  1. confirmé par la documentation historique ;
-  2. observé dans les pilotes existants ;
-  3. déduit par analyse ;
-  4. approximation nécessaire ;
-  5. inconnu.
-- La matrice de compatibilité distingue : implémentée et vérifiée, implémentée non
-  vérifiée sur un véritable Apollo II, partiellement émulée, non implémentée,
-  inconnue ou insuffisamment documentée.
-- Préférer une émulation honnêtement documentée à une compatibilité prétendue.
+- Never infer a command's meaning from its name alone; compare sources.
+- Beware of same-named commands with different meanings on Apollo and Apollo II.
+- Classify every documented behavior as historically documented, observed in drivers, deduced,
+  necessarily approximated, or unknown.
+- Compatibility status distinguishes implemented/verified, implemented but unverified on real
+  Apollo II hardware, partial, unimplemented, and unknown/insufficiently documented.
+- Prefer honestly documented emulation to unsupported compatibility claims.
 
 ## Architecture
 
 ```text
-VM (DOS / Windows / OS/2) → pilote Apollo II → COM1 → UART émulée QEMU
-  → socket Unix → Apolo-emu (transport → protocole → backend vocal)
+DOS / Windows / OS/2 VM → Apollo II driver → COM1 → QEMU UART
+  → Unix socket → Apolo-emu (transport → protocol → speech backend)
   → Speech Dispatcher → eSpeak NG
 ```
 
-- Pas de périphérique QEMU interne, **aucune modification de QEMU**.
-- Cœur de l'émulation indépendant du transport, de QEMU, du backend vocal, du
-  système invité et du lecteur d'écran. Responsabilités clairement séparées.
-- Linux, Python, peu de dépendances, sans privilèges root, utilisable hors NixOS
-  (une intégration Nix peut s'ajouter). Pas de réécriture en C.
+- No internal QEMU device; **no QEMU modifications**.
+- Emulation core independent of transport, QEMU, speech backend, guest OS and screen reader,
+  with clearly separated responsibilities.
+- Linux, Python, few dependencies, no root privileges, usable outside NixOS (optional Nix integration).
+  No C rewrite.
 
-## Règles du protocole
+## Protocol rules
 
-- Analyseur à **état explicite** traitant un **flux d'octets** : une lecture sur la
-  socket ne correspond jamais à une commande complète ; gérer fragments, séquences
-  incomplètes, commandes successives dans un même bloc et caractères de contrôle.
-- Paramètres persistants, réinitialisations, interruptions et réponses à l'invité
-  modélisés explicitement.
-- Commandes inconnues : journalisées proprement, sans comportement arbitraire.
-- Pas de conversion d'encodage implicite ni de transformation destructrice du texte.
-- Synchronisation (notamment `@e` d'IBM Screen Reader/2) : distinguer réception,
-  analyse, mise en attente, début de synthèse, progression, fin et interruption.
-  Les réponses doivent suivre autant que possible la progression réelle (étudier
-  SSML et `INDEX_MARKS` de Speech Dispatcher, vérifier leur prise en charge
-  effective). Sinon, comportement déterministe et limite documentée.
-- Éviter le découpage systématique en un message par mot.
-- Extensions non authentiques (p. ex. l'ancien `@I<c>` d'Épaulard) :
-  isolées, documentées, **désactivées par défaut**, sans jamais modifier le sens
-  d'une commande Apollo II authentique.
+- An **explicit-state parser** consumes a **byte stream**. Socket reads never correspond to complete
+  commands: handle fragments, incomplete sequences, consecutive commands and control characters.
+- Explicitly model persistent settings, resets, interruptions and guest replies.
+- Log unknown commands clearly, without arbitrary behavior.
+- No implicit encoding conversions or destructive text transformations.
+- Synchronization, especially IBM Screen Reader/2's `@e`: distinguish reception, parsing, queuing,
+  speech start, progress, completion and interruption. Replies should track actual progress where possible
+  (study SSML and Speech Dispatcher `INDEX_MARKS`, checking real engine support). Otherwise provide
+  deterministic behavior and document the limit.
+- Avoid systematically creating one speech message per word.
+- Non-authentic extensions (e.g. Épaulard's old `@I<c>`) must be isolated, documented and
+  **disabled by default**, never changing an authentic Apollo II command's meaning.
 
-## Transport série et contrôle de flux
+## Serial transport and flow control
 
-- Socket Unix bidirectionnelle vers QEMU.
-- Une socket ne transporte que des octets : RTS/CTS/DTR/DSR ne la traversent pas.
-  Distinguer ce que fait l'UART de QEMU, ce que permet le transport et ce qui
-  relève de l'Apollo II. Ne pas prétendre à un contrôle de flux matériel complet
-  si l'interface ne le permet pas.
+- Bidirectional Unix socket to QEMU.
+- A socket carries bytes only, not RTS/CTS/DTR/DSR. Distinguish QEMU UART behavior, transport
+  capabilities and Apollo II behavior. Do not claim full hardware flow control if the interface
+  cannot provide it.
 
-## Backend vocal
+## Speech backend
 
-Interface remplaçable : envoi de texte, arrêt immédiat, débit, hauteur, volume,
-progression, fin de lecture. La traduction des paramètres Apollo II vers le moteur
-est documentée et testée.
+Replaceable interface: text submission, immediate stop, rate, pitch, volume, progress and completion.
+Document and test Apollo II to engine parameter mapping.
 
-## Lanceur QEMU
+## QEMU launcher
 
-- Mode autonome (p. ex. `apolo-emu --socket PATH`) et mode lanceur
-  (p. ex. `apolo-emu run -- qemu-system-i386 …`) ; interface ajustable si plus robuste.
-- Socket propre à chaque instance, ordre de démarrage correct, ajout du port série
-  sans conflit avec les options existantes, erreurs de démarrage gérées, signaux
-  propagés, codes de retour préservés, nettoyage de ses seules ressources, pas de
-  socket obsolète, plusieurs instances indépendantes.
-- Ne jamais tuer un processus QEMU qu'il n'a pas lancé ; ne pas arrêter brutalement
-  une VM quand un arrêt propre de l'invité est nécessaire.
-- N'imposer aucune configuration de disque, mémoire, processeur ou invité.
+- Standalone mode (e.g. `apolo-emu --socket PATH`) and launcher mode
+  (`apolo-emu run -- qemu-system-i386 …`); interface may change for robustness.
+- Per-instance socket, correct startup ordering, serial-port injection without conflicts,
+  handled startup errors, forwarded signals, preserved exit codes, cleanup of its own resources only,
+  no stale sockets, independent concurrent instances.
+- Never kill a QEMU process it did not start, or abruptly stop a VM requiring clean guest shutdown.
+- Impose no disk, memory, processor or guest configuration.
 
 ## Tests
 
-- Faux backend vocal pour tester le protocole sans parole ; progression de lecture
-  simulable précisément.
-- Couvrir : analyse, fragments, blocs multiples, paramètres, interruptions,
-  réinitialisations, acquittements, réponses, encodages, commandes inconnues,
-  erreurs de transport, reconnexions, instances multiples, nettoyage des processus
-  et sockets.
-- Tests d'intégration Speech Dispatcher et QEMU quand c'est possible, sur une VM de
-  test indépendante. Les tests automatisés ne dépendent pas du démarrage d'OS/2 ou
-  de Windows 3.11.
+- Fake speech backend for silent protocol tests, with precisely controlled progress.
+- Cover parsing, fragments, multiple blocks, settings, interruption, reset, acknowledgments, replies,
+  encoding, unknown commands, transport errors, reconnection, multiple instances, process/socket cleanup.
+- Speech Dispatcher/QEMU integration where available, using an independent test VM.
+  Automated tests must not depend on booting OS/2 or Windows 3.11.
 
-## Documentation attendue
+## Expected documentation
 
-README, protocole Apollo II, architecture, lanceur QEMU (y compris intégration à des
-commandes QEMU existantes), matrice de compatibilité, limitations connues,
-installation, exemples, références documentaires.
+README, Apollo II protocol, architecture, QEMU launcher including existing-command integration,
+compatibility matrix, known limitations, installation, examples and source references.
 
-## Méthode
+## Method
 
-Travail autonome par phases : investigation → architecture → implémentation →
-tests → intégration QEMU → bilan (fonctionnalités, sources, résultats de tests,
-limites de fidélité, commandes manquantes, incompatibilités trouvées dans les
-passerelles existantes, prochaines améliorations). Pas besoin de validation entre
-les étapes, mais respect strict de l'intégrité des projets voisins.
+Work autonomously through investigation → architecture → implementation → tests → QEMU integration →
+report (features, sources, test results, fidelity limits, missing commands, gateway incompatibilities,
+next improvements). No approval needed between phases, but strictly preserve neighboring projects.
 
-## Pièges connus
+## Known pitfalls
 
-- La ponctuation `. , : ; ! ?` termine une proposition, comme CR : `?` dans `@W?`
-  ferme la proposition. Beaucoup d'attentes de tests fausses venaient de là.
-- `*` dans un motif accepte n'importe quel caractère, y compris `@` : `@Mz@M2A`
-  consomme le second `@` (comportement de la ROM, voulu).
-- Les effets d'une proposition (échos, réponses `@c?`) attendent que la parole
-  l'atteigne : un test doit faire avancer le faux backend (`begin`, `reach`, `finish`).
-- `@I?` répond immédiatement, avant les échos des propositions encore en attente.
-- eSpeak signale une marque finale un peu avant END : les actions d'une proposition
-  muette en fin de lot sont exécutées à END, pas sur une marque.
-- QEMU 10.2 accepte deux UART au même emplacement sans erreur, et `-serial none`
-  consomme un numéro de port : le lanceur doit compter lui-même.
-- Avec un chardev socket, l'invité voit MSR = 0xB0 (CTS, DSR, DCD actifs) : aucun
-  contrôle de flux n'est possible.
-- Une VM d'un projet voisin peut tourner : ne pas la toucher sans demande. Arrêt
-  propre d'OS/2 : menu Arrêt du bureau, puis QMP `quit` (voir `../os2/docs/REPRISE.md`).
-  Pour les essais automatiques de parole réelle, utiliser la priorité SSIP
-  `notification` et un volume bas.
+- `. , : ; ! ?` end clauses like CR: `?` in `@W?` terminates the clause. Many incorrect test
+  expectations came from overlooking this.
+- `*` matches any character including `@`: `@Mz@M2A` consumes the second `@` (intentional ROM behavior).
+- Clause effects (echoes, `@c?` replies) wait for speech to reach them; tests must advance the fake
+  backend (`begin`, `reach`, `finish`).
+- `@I?` replies immediately, before echoes from pending clauses.
+- eSpeak reports a final mark slightly before END: a trailing silent clause's actions execute at END,
+  not at a mark.
+- QEMU 10.2 permits two UARTs at the same address; `-serial none` consumes a port number.
+  The launcher must count ports itself.
+- With a socket chardev, the guest sees MSR = 0xB0 (CTS, DSR, DCD asserted): no flow control is possible.
+- A neighboring VM may be running: do not touch it without permission. Clean OS/2 shutdown:
+  desktop Shutdown menu, then QMP `quit` (see `../os2/docs/REPRISE.md`). For automated actual-speech
+  trials, use SSIP `notification` priority and low volume.

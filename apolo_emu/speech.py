@@ -1,9 +1,9 @@
-"""Interface entre l'appareil émulé et un moteur vocal.
+"""Interface between the emulated device and a speech engine.
 
-L'appareil produit des énoncés (`Utterance`) faits de texte et de marques. Le
-backend les prononce dans l'ordre et signale leur progression par
-`SpeechEvent`. Les paramètres restent exprimés en valeurs Apollo : la traduction
-vers un moteur donné appartient au backend (voir mapping.py).
+The device produces utterances containing text and marks. The backend speaks
+them in order and reports progress through SpeechEvent. Parameters remain in
+Apollo units: mapping them to a particular engine is the backend's job
+(see mapping.py).
 """
 
 from __future__ import annotations
@@ -18,17 +18,17 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class VoiceParams:
-    """Réglages Apollo qui influent sur la parole produite."""
+    """Apollo settings affecting speech output."""
 
     speed: int = 3  # @W 1-9
     pitch: int = 8  # @F 0-F
-    pitch_step: int = 8  # @F+ = 16, @F- = 0, sinon 8
+    pitch_step: int = 8  # @F+ = 16, @F- = 0, otherwise 8
     volume: int = 6  # @A 0-F
-    voice: int = 1  # @V 1-6 (0 = voix coupée)
-    speaker: int = 0  # @K 0 masculin, 1 non masculin
+    voice: int = 1  # @V 1-6 (0 = speech disabled)
+    speaker: int = 0  # @K 0 male, 1 non-male
     punct: int = 0  # @P
     spell: int = 0  # @S
-    language: str = "en"  # langue de l'emplacement de ROM choisi par @=
+    language: str = "en"  # language of the ROM bank selected by @=
 
     @property
     def silent(self) -> bool:
@@ -42,7 +42,7 @@ class Mark:
 
 @dataclass(frozen=True)
 class Pause:
-    """Silence inséré (effets sonores @T, approximés)."""
+    """Inserted pause (approximation of @T sound effects)."""
 
     ms: int
 
@@ -67,7 +67,7 @@ class Utterance:
 
 @dataclass(frozen=True)
 class SpeechEvent:
-    """kind : 'begin', 'mark', 'end' ou 'cancel'."""
+    """kind: 'begin', 'mark', 'end' or 'cancel'."""
 
     uid: int
     kind: str
@@ -81,10 +81,10 @@ class SpeechBackend(Protocol):
     def set_event_sink(self, sink: EventSink) -> None: ...
 
     def speak(self, utt: Utterance) -> None:
-        """Met l'énoncé en file, après ceux qui sont déjà en cours."""
+        """Queue the utterance after those already in progress."""
 
     def cancel(self) -> None:
-        """Arrête immédiatement la parole et vide la file."""
+        """Stop speech immediately and clear the queue."""
 
     async def start(self) -> None: ...
 
@@ -92,9 +92,9 @@ class SpeechBackend(Protocol):
 
 
 class NullBackend:
-    """Backend sans son, qui termine chaque énoncé immédiatement.
+    """Silent backend that finishes every utterance immediately.
 
-    En pratique, sert d'ultime repli : l'invité reçoit quand même ses échos.
+    A last-resort fallback: the guest still receives its echoes.
     """
 
     def __init__(self) -> None:
@@ -104,7 +104,7 @@ class NullBackend:
         self._sink = sink
 
     def speak(self, utt: Utterance) -> None:
-        log.info("PAROLE (sans son) %r", utt.text)
+        log.info("SPEECH (silent) %r", utt.text)
         if self._sink:
             self._sink(SpeechEvent(utt.uid, "begin"))
             self._sink(SpeechEvent(utt.uid, "end"))
@@ -120,10 +120,10 @@ class NullBackend:
 
 
 class SimulatedBackend:
-    """Backend sans son qui simule la durée de la parole (caractères par seconde).
+    """Silent backend simulating speech duration in characters per second.
 
-    Les marques sont signalées quand le texte qui les précède a été « prononcé ».
-    Sert au mode --backend simulated et aux tests d'intégration sans Speech Dispatcher.
+    Marks are reported when the preceding text has been "spoken".
+    Used for --backend simulated and integration tests without Speech Dispatcher.
     """
 
     def __init__(self, cps: float = 15.0) -> None:
@@ -137,7 +137,7 @@ class SimulatedBackend:
         self._sink = sink
 
     def speak(self, utt: Utterance) -> None:
-        log.info("PAROLE (simulée) %r", utt.text)
+        log.info("SPEECH (simulated) %r", utt.text)
         self._queue.append(utt)
         if self._wakeup is not None:
             self._wakeup.set()

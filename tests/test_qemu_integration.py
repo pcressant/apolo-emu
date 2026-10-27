@@ -1,6 +1,6 @@
-"""Intégration avec un vrai QEMU et une VM de test indépendante (secteur d'amorçage de tests/guest.py).
+"""Integration with real QEMU and an independent test VM (tests/guest.py boot sector).
 
-Ignoré si qemu-system-i386 est absent ou si APOLO_EMU_SKIP_QEMU est défini.
+Skipped if qemu-system-i386 is missing or APOLO_EMU_SKIP_QEMU is set.
 """
 
 import os
@@ -19,7 +19,7 @@ ROOT = os.path.dirname(HERE)
 QEMU = shutil.which("qemu-system-i386")
 
 
-@unittest.skipIf(QEMU is None or os.environ.get("APOLO_EMU_SKIP_QEMU"), "QEMU indisponible")
+@unittest.skipIf(QEMU is None or os.environ.get("APOLO_EMU_SKIP_QEMU"), "QEMU unavailable or disabled")
 class QemuTests(unittest.TestCase):
     def run_vm(self, message: bytes, expected_len: int, extra=(), qemu_extra=(), timeout=30, port=0x3F8):
         with tempfile.TemporaryDirectory() as tmp:
@@ -49,7 +49,7 @@ class QemuTests(unittest.TestCase):
                     time.sleep(0.1)
             finally:
                 if p.poll() is None:
-                    p.send_signal(signal.SIGTERM)  # transmis à QEMU par le lanceur
+                    p.send_signal(signal.SIGTERM)  # forwarded to QEMU by the launcher
                 _, err = p.communicate(timeout=15)
             leftovers = os.listdir(base)
             return data, p.returncode, err.decode(errors="replace"), leftovers
@@ -58,12 +58,12 @@ class QemuTests(unittest.TestCase):
         data, rc, err, leftovers = self.run_vm(b"hello world @I+\r@E1\r@I?", 1 + 4 + 1)
         self.assertGreaterEqual(len(data), 6, err)
         msr = data[0]
-        print(f"MSR vu par l'invité : {msr:#04x}", file=sys.stderr)
-        # Socket : l'UART de QEMU présente CTS, DSR et DCD actifs en permanence (docs/transport-serie.md).
+        print(f"Guest-visible MSR: {msr:#04x}", file=sys.stderr)
+        # Socket: QEMU UART exposes CTS, DSR, DCD permanently asserted (docs/serial-transport.md).
         self.assertEqual(msr & 0xB0, 0xB0, f"MSR = {msr:#04x}")
-        # @I? est traité dès réception : la parole est en cours, une marque non prononcée.
+        # @I? is handled on reception: speech active, one unspoken mark.
         self.assertEqual(data[1:5], b"I10T")
-        # @E1 suit la fin de « hello world ».
+        # @E1 follows the end of 'hello world'.
         self.assertEqual(data[5:6], b"1")
         self.assertEqual(rc, 0, err)
         self.assertEqual(leftovers, [])
